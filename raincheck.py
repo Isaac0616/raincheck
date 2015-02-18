@@ -80,11 +80,6 @@ class TicketQueueManager(BaseManager):
 TicketQueueManager.register('TicketQueue', TicketQueue)
 
 
-def _work(queue, pool_sema):
-    while True:
-        pool_sema.acquire()
-        queue.serve_next()
-
 
 class ExpireSet():
     def __init__(self, expire_time):
@@ -153,7 +148,7 @@ class RainCheck():
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
-        self.max_age = self.time_pause + self.time_interval
+        self.max_age = self.time_pause + self.time_interval # may need longer
         self.threads = threads
         self.key = key
 
@@ -166,8 +161,13 @@ class RainCheck():
         self.manager.start()
         self.queue = self.manager.TicketQueue(self.queue_size)
 
-        self.worker = Process(target=_work, args=(self.queue, self.pool_sema))
+        self.worker = Process(target=self._work)
         self.worker.start()
+
+    def _work(self):
+        while True:
+            self.pool_sema.acquire()
+            self.queue.serve_next()
 
     def enqueue(self, client_id, priority, target, *args, **keywords):
         self.fms.add(client_id, priority)
@@ -230,12 +230,10 @@ class RainCheck():
                 except:
                     resp = make_response(render_template(template, status='Invalid raincheck', detail='raincheck format error', rank=None))
                     return resp
-                    #abort(403)
                 error = self.validate(client_id, timestamp, time_start, time_end, mac)
                 if error:
                     resp = make_response(render_template(template, status='Invalid raincheck', detail=error, rank=None))
                     return resp
-                    #abort(403)
 
                 resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
                 if not resp:
