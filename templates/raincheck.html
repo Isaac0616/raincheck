@@ -1,0 +1,15 @@
+<html>
+  <head>
+    <script>
+      document.addEventListener("DOMContentLoaded", function(event) {
+        document.getElementById('cookies').innerHTML += document.cookie;
+      });
+    </script>
+  </head>
+  <body>
+    <h1>{{ status }}</h1>
+    <p id='cookies'><b>cookies:</b><br></p>
+    <p><b>rank:</b><br>{{ rank }}</p>
+    <p><b>details:</b><br>{{ detail }}</p>
+  </body>
+</html>
