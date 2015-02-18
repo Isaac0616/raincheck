@@ -1,6 +1,6 @@
 from blist import sortedlist
 from functools import wraps
-from multiprocessing import Process, Lock, Condition, Event, cpu_count
+from multiprocessing import Process, Lock, Condition, Event, Semaphore
 from multiprocessing.managers import BaseManager
 from flask import copy_current_request_context, abort, make_response, request, render_template, render_template_string
 from base64 import b64encode
@@ -15,86 +15,76 @@ import sys
 
 INF = 2147483647
 
-class Job():
-    def __init__(self, priority, target, *args, **keywords):
+class ShouldNotBeHereError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+    def __str__(self):
+        return repr(self.msg)
+
+class Ticket():
+    def __init__(self, priority):
         self.priority = priority
-        self.target = target
-        self.args = args
-        self.keywords = keywords
-        self.result = None
         self.state = 'initial'
-        self.exception = None
-        self.finish = Event()
-
-    def get_result(self):
-        self.finish.wait()
-        return (self.result, self.state, self.exception)
-
-    def execute(self):
-        try:
-            self.state = 'executing'
-            self.result = dill.loads(self.target)(*self.args, **self.keywords)
-        except:
-            self.state = 'error'
-            self.exception = sys.exc_info()[1]
-        else:
-            self.state = 'done'
-        finally:
-            self.finish.set()
+        self.dequeue = Event()
 
     def cancel(self):
         self.state = 'cancel'
-        self.finish.set()
+        self.dequeue.set()
+
+    def ready(self):
+        self.state = 'ready'
+        self.dequeue.set()
 
     def get_priority(self):
         return self.priority
 
+    def get_state(self):
+        self.dequeue.wait()
+        return self.state
 
-class JobManager(BaseManager):
+class TicketManager(BaseManager):
     pass
 
-JobManager.register('Job', Job)
+TicketManager.register('Ticket', Ticket)
 
 
-class JobQueue():
+class TicketQueue():
     def __init__(self, max_size):
         self.queue = sortedlist(key=lambda x: x.get_priority())
         self.max_size = max_size
         self.mutex = Lock()
         self.not_empty = Condition(self.mutex)
-        self.manager = JobManager()
+        self.manager = TicketManager()
         self.manager.start()
 
-    def enqueue(self, priority, target, *args, **keywords):
+    def wait(self, priority):
         with self.mutex:
-            job = self.manager.Job(priority, target, *args, **keywords)
-            self.queue.add(job)
+            ticket = self.manager.Ticket(priority)
+            self.queue.add(ticket)
             if len(self.queue) > self.max_size:
-                unfinish_job = self.queue.pop(-1)
-                unfinish_job.cancel()
+                self.queue.pop(-1).cancel()
             self.not_empty.notify()
-        return job.get_result()
+        return ticket.get_state()
 
-    def get_job(self):
+    def serve_next(self):
         with self.not_empty:
             if len(self.queue) == 0:
                 self.not_empty.wait()
-            return self.queue.pop(0)
+            self.queue.pop(0).ready()
 
     def __contains__(self, item):
         return item in self.queue
 
-
-class JobQueueManager(BaseManager):
+class TicketQueueManager(BaseManager):
     pass
 
-JobQueueManager.register('JobQueue', JobQueue)
+TicketQueueManager.register('TicketQueue', TicketQueue)
 
 
-def _work(queue):
+def _work(queue, pool_sema):
     while True:
-        job = queue.get_job()
-        job.execute()
+        pool_sema.acquire()
+        queue.serve_next()
 
 
 class ExpireSet():
@@ -160,36 +150,64 @@ class FMSketch():
 
 registered = {}
 
+default_template = '''
+<html>
+  <head>
+    <script>
+      document.addEventListener("DOMContentLoaded", function(event) {{
+        document.getElementById('cookies').innerHTML += document.cookie;
+      }});
+    </script>
+  </head>
+  <body>
+    <h1>{status}</h1>
+    <p id='cookies'><b>cookies:</b><br></p>
+    <p><b>rank:</b><br>{rank}</p>
+    <p><b>details:</b><br>{detail}</p>
+  </body>
+</html>
+'''
+
 class RainCheck():
-    def __init__(self, name, queue_size, time_pause, time_interval, workers=cpu_count(), key=os.urandom(16)):
+    def __init__(self, name, queue_size, time_pause, time_interval, threads=1, key=os.urandom(16)):
         self.name = name
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
         self.max_age = self.time_pause + self.time_interval
-        self.workers = workers
+        self.threads = threads
         self.key = key
 
-        self.manager = JobQueueManager()
-        self.manager.start()
-        self.queue = self.manager.JobQueue(self.queue_size)
         self.accepted = ExpireSet(self.max_age)
         self.buffered = ExpireSet(-1)
         self.fms = FMSketch(self.max_age)
 
-        self.worker_pool = [Process(target=_work, args=(self.queue, )) for i in range(self.workers)]
-        for worker in self.worker_pool:
-            worker.start()
+        self.pool_sema = Semaphore(threads)
+        self.manager = TicketQueueManager()
+        self.manager.start()
+        self.queue = self.manager.TicketQueue(self.queue_size)
+
+        self.worker = Process(target=_work, args=(self.queue, self.pool_sema))
+        self.worker.start()
 
     def enqueue(self, client_id, priority, target, *args, **keywords):
         self.fms.add(client_id, priority)
-        #need try except
         self.buffered.add(client_id)
-        result = self.queue.enqueue(priority, target, *args, **keywords)
+        state = self.queue.wait(priority)
         self.buffered.remove(client_id)
-        if result[1] == 'done':
+
+        if state == 'ready':
+            resp = target(*args, **keywords)
+            self.pool_sema.release()
             self.accepted.add(client_id)
-        return result
+        elif state == 'cancel':
+            resp = make_response(default_template.format(status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(int(priotiry))))
+            resp.headers['Refresh'] = 5
+            resp.set_cookie('raincheck#' + request.path, self.issue(priority), max_age=self.max_age)
+        else:
+            raise ShouldNotBeHereError('State can only be ready or cancel')
+
+        return resp
 
     def validate(self, client_id, timestamp, time_start, time_end, mac):
         if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, timestamp, time_start, time_end]), hashlib.sha256).digest()), str(mac)):
@@ -218,26 +236,9 @@ class RainCheck():
         return self.fms.rank(priority)
 
 
-def register(name, queue_size, time_pause, time_interval, workers, key):
-    registered[name] = RainCheck(name, queue_size, time_pause, time_interval, workers, key)
+def register(name, queue_size, time_pause, time_interval, threads, key):
+    registered[name] = RainCheck(name, queue_size, time_pause, time_interval, threads, key)
 
-default_template = '''
-<html>
-  <head>
-    <script>
-      document.addEventListener("DOMContentLoaded", function(event) {{
-        document.getElementById('cookies').innerHTML += document.cookie;
-      }});
-    </script>
-  </head>
-  <body>
-    <h1>{status}</h1>
-    <p id='cookies'><b>cookies:</b><br></p>
-    <p><b>rank:</b><br>{rank}</p>
-    <p><b>details:</b><br>{detail}</p>
-  </body>
-</html>
-'''
 
 def raincheck(name, template=None):
     def decorator(func):
@@ -265,17 +266,6 @@ def raincheck(name, template=None):
                 return resp
                 #abort(403)
 
-            result = rc.enqueue(client_id, timestamp, dill.dumps(copy_current_request_context(func)), *args, **keywords)
-
-            if result[1] == 'error':
-                resp = make_response(default_template.format(status='Execute original function error', detail=result[2].__class__.__name__ + ': ' + str(result[2]), rank=None))
-                return resp
-            elif result[1] == 'cancel':
-                resp = make_response(default_template.format(status='Retrying', detail='The queue is full and your priority is not high enough', rank=rc.rank(int(timestamp))))
-                resp.headers['Refresh'] = 5
-                resp.set_cookie('raincheck#' + request.path, rc.issue(timestamp), max_age=rc.max_age)
-                return resp
-            else:
-                return result[0]
+            return rc.enqueue(client_id, timestamp, func, *args, **keywords)
         return decorated_func
     return decorator

@@ -5,7 +5,7 @@ from time import sleep
 import random
 
 from raincheck import register, raincheck
-register(name='all', queue_size=3, time_pause=1, time_interval=10, workers=1, key='this is secret key')
+register(name='all', queue_size=3, time_pause=1, time_interval=10, threads=1, key='this is secret key')
 
 @app.route('/')
 @raincheck('all')
