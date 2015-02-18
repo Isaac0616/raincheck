@@ -235,37 +235,30 @@ class RainCheck():
     def rank(self, priority):
         return self.fms.rank(priority)
 
+    def raincheck(self, template=None):
+        def decorator(func):
+            @wraps(func)
+            def decorated_func(*args, **keywords):
+                # TODO adjust refresh time by time_apuse, time_interval
+                if request.cookies.get('raincheck#' + request.path) == None:
+                    resp = make_response(default_template.format(status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
+                    resp.headers['Refresh'] = 2
+                    resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
+                    return resp
 
-def register(name, queue_size, time_pause, time_interval, threads, key):
-    registered[name] = RainCheck(name, queue_size, time_pause, time_interval, threads, key)
+                # may need to clear cookie
+                try:
+                    client_id, timestamp, time_start, time_end, mac = request.cookies.get('raincheck#' + request.path).split('#')
+                except:
+                    resp = make_response(default_template.format(status='Invalid raincheck', detail='raincheck format error', rank=None))
+                    return resp
+                    #abort(403)
+                error = self.validate(client_id, timestamp, time_start, time_end, mac)
+                if error:
+                    resp = make_response(default_template.format(status='Invalid raincheck', detail=error, rank=None))
+                    return resp
+                    #abort(403)
 
-
-def raincheck(name, template=None):
-    def decorator(func):
-        @wraps(func)
-        def decorated_func(*args, **keywords):
-            rc = registered[name]
-
-            # TODO adjust refresh time by time_apuse, time_interval
-            if request.cookies.get('raincheck#' + request.path) == None:
-                resp = make_response(default_template.format(status='First time request', detail='Get the raincheck', rank=rc.rank(INF)))
-                resp.headers['Refresh'] = 2
-                resp.set_cookie('raincheck#' + request.path, rc.issue(), max_age=rc.max_age)
-                return resp
-
-            # may need to clear cookie
-            try:
-                client_id, timestamp, time_start, time_end, mac = request.cookies.get('raincheck#' + request.path).split('#')
-            except:
-                resp = make_response(default_template.format(status='Invalid raincheck', detail='raincheck format error', rank=None))
-                return resp
-                #abort(403)
-            error = rc.validate(client_id, timestamp, time_start, time_end, mac)
-            if error:
-                resp = make_response(default_template.format(status='Invalid raincheck', detail=error, rank=None))
-                return resp
-                #abort(403)
-
-            return rc.enqueue(client_id, timestamp, func, *args, **keywords)
-        return decorated_func
-    return decorator
+                return self.enqueue(client_id, timestamp, func, *args, **keywords)
+            return decorated_func
+        return decorator
