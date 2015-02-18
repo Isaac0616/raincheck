@@ -2,9 +2,8 @@ from blist import sortedlist
 from functools import wraps
 from multiprocessing import Process, Lock, Condition, Event, Semaphore
 from multiprocessing.managers import BaseManager
-from flask import copy_current_request_context, abort, make_response, request, render_template, render_template_string
+from flask import abort, make_response, request, render_template
 from base64 import b64encode
-import dill
 import hmac, hashlib
 import time
 import threading
@@ -148,26 +147,6 @@ class FMSketch():
         return str(self.array)
 
 
-registered = {}
-
-default_template = '''
-<html>
-  <head>
-    <script>
-      document.addEventListener("DOMContentLoaded", function(event) {{
-        document.getElementById('cookies').innerHTML += document.cookie;
-      }});
-    </script>
-  </head>
-  <body>
-    <h1>{status}</h1>
-    <p id='cookies'><b>cookies:</b><br></p>
-    <p><b>rank:</b><br>{rank}</p>
-    <p><b>details:</b><br>{detail}</p>
-  </body>
-</html>
-'''
-
 class RainCheck():
     def __init__(self, name, queue_size, time_pause, time_interval, threads=1, key=os.urandom(16)):
         self.name = name
@@ -194,20 +173,19 @@ class RainCheck():
         self.fms.add(client_id, priority)
         self.buffered.add(client_id)
         state = self.queue.wait(priority)
-        self.buffered.remove(client_id)
 
         if state == 'ready':
-            resp = target(*args, **keywords)
-            self.pool_sema.release()
-            self.accepted.add(client_id)
+            try:
+                resp = target(*args, **keywords)
+            finally:
+                self.pool_sema.release()
+                self.accepted.add(client_id)
+                self.buffered.remove(client_id)
+            return resp
         elif state == 'cancel':
-            resp = make_response(default_template.format(status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(int(priotiry))))
-            resp.headers['Refresh'] = 5
-            resp.set_cookie('raincheck#' + request.path, self.issue(priority), max_age=self.max_age)
+            self.buffered.remove(client_id)
         else:
             raise ShouldNotBeHereError('State can only be ready or cancel')
-
-        return resp
 
     def validate(self, client_id, timestamp, time_start, time_end, mac):
         if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, timestamp, time_start, time_end]), hashlib.sha256).digest()), str(mac)):
@@ -235,13 +213,13 @@ class RainCheck():
     def rank(self, priority):
         return self.fms.rank(priority)
 
-    def raincheck(self, template=None):
+    def raincheck(self, template='raincheck.html'):
         def decorator(func):
             @wraps(func)
             def decorated_func(*args, **keywords):
                 # TODO adjust refresh time by time_apuse, time_interval
                 if request.cookies.get('raincheck#' + request.path) == None:
-                    resp = make_response(default_template.format(status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
+                    resp = make_response(render_template(template, status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
                     resp.headers['Refresh'] = 2
                     resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
                     return resp
@@ -250,15 +228,20 @@ class RainCheck():
                 try:
                     client_id, timestamp, time_start, time_end, mac = request.cookies.get('raincheck#' + request.path).split('#')
                 except:
-                    resp = make_response(default_template.format(status='Invalid raincheck', detail='raincheck format error', rank=None))
+                    resp = make_response(render_template(template, status='Invalid raincheck', detail='raincheck format error', rank=None))
                     return resp
                     #abort(403)
                 error = self.validate(client_id, timestamp, time_start, time_end, mac)
                 if error:
-                    resp = make_response(default_template.format(status='Invalid raincheck', detail=error, rank=None))
+                    resp = make_response(render_template(template, status='Invalid raincheck', detail=error, rank=None))
                     return resp
                     #abort(403)
 
-                return self.enqueue(client_id, timestamp, func, *args, **keywords)
+                resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
+                if not resp:
+                    resp = make_response(render_template(template, status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(priotiry)))
+                    resp.headers['Refresh'] = 5
+                    resp.set_cookie('raincheck#' + request.path, self.issue(priority), max_age=self.max_age)
+                return resp
             return decorated_func
         return decorator
