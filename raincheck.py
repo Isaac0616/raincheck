@@ -10,7 +10,6 @@ import threading
 import os
 import struct
 import socket
-import sys
 
 INF = 2147483647
 
@@ -165,9 +164,12 @@ class RainCheck():
         self.worker.start()
 
     def _work(self):
-        while True:
-            self.pool_sema.acquire()
-            self.queue.serve_next()
+        try:
+            while True:
+                self.pool_sema.acquire()
+                self.queue.serve_next()
+        except:
+            pass
 
     def enqueue(self, client_id, priority, target, *args, **keywords):
         self.fms.add(client_id, priority)
