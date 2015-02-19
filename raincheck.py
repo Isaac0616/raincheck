@@ -147,6 +147,7 @@ class RainCheck():
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
+        self.time_refresh = (self.time_pause + self.time_interval)/2
         self.max_age = self.time_pause + self.time_interval # may need longer
         self.threads = threads
         self.key = key
@@ -219,10 +220,9 @@ class RainCheck():
         def decorator(func):
             @wraps(func)
             def decorated_func(*args, **keywords):
-                # TODO adjust refresh time by time_apuse, time_interval
                 if request.cookies.get('raincheck#' + request.path) == None:
                     resp = make_response(render_template(template, status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
-                    resp.headers['Refresh'] = 2
+                    resp.headers['Refresh'] = self.time_pause
                     resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
                     return resp
 
@@ -240,7 +240,7 @@ class RainCheck():
                 resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
                 if not resp:
                     resp = make_response(render_template(template, status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(priotiry)))
-                    resp.headers['Refresh'] = 5
+                    resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self.issue(priority), max_age=self.max_age)
                 return resp
             return decorated_func
