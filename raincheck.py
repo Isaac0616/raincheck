@@ -2,7 +2,7 @@ from blist import sortedlist
 from functools import wraps
 from multiprocessing import Process, Lock, Condition, Event, Semaphore
 from multiprocessing.managers import BaseManager
-from flask import abort, make_response, request, render_template
+from flask import abort, make_response, request, render_template, g
 from base64 import b64encode
 import hmac, hashlib
 import time
@@ -193,7 +193,7 @@ class RainCheck():
     def validate(self, client_id, timestamp, time_start, time_end, mac):
         if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, timestamp, time_start, time_end]), hashlib.sha256).digest()), str(mac)):
             return 'MAC verification fail'
-        if request.remote_addr != client_id:
+        if g.ip != client_id:
             return 'Client ID mismatch'
         current_time = time.time()
         if current_time < float(time_start) or current_time > float(time_end):
@@ -208,9 +208,9 @@ class RainCheck():
         time_start = current_time + self.time_pause
         time_end = time_start + self.time_interval
         if timestamp == None:
-            message = '#'.join([request.remote_addr, str(current_time), str(time_start), str(time_end)])
+            message = '#'.join([g.ip, str(current_time), str(time_start), str(time_end)])
         else:
-            message = '#'.join([request.remote_addr, timestamp, str(time_start), str(time_end)])
+            message = '#'.join([g.ip, timestamp, str(time_start), str(time_end)])
         return message + '#' + b64encode(hmac.new(self.key, message, hashlib.sha256).digest())
 
     def rank(self, priority):
@@ -220,6 +220,12 @@ class RainCheck():
         def decorator(func):
             @wraps(func)
             def decorated_func(*args, **keywords):
+                testing_ip = request.args.get('ip')
+                if testing_ip:
+                    g.ip = testing_ip
+                else:
+                    g.ip = request.remote_addr
+
                 if request.cookies.get('raincheck#' + request.path) == None:
                     resp = make_response(render_template(template, status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
                     resp.headers['Refresh'] = self.time_pause
