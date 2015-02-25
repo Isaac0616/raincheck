@@ -245,9 +245,9 @@ class RainCheck():
 
                 resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
                 if not resp:
-                    resp = make_response(render_template(template, status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(priotiry)))
+                    resp = make_response(render_template(template, status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(float(timestamp))))
                     resp.headers['Refresh'] = self.time_refresh
-                    resp.set_cookie('raincheck#' + request.path, self.issue(priority), max_age=self.max_age)
+                    resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                 return resp
             return decorated_func
         return decorator
