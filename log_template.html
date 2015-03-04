@@ -1,0 +1,95 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+
+    <style>
+    #main {
+      margin: 10px;
+    }
+
+    button {
+      outline: 0 !important;
+      margin: 5 5 5 0px !important;
+    }
+
+    .panel-body {
+      white-space: pre-line;
+      padding: 0 15px;
+    }
+    </style>
+
+    <script>
+    $(function() {
+      $('.collapse').collapse();
+      $('.nav-tabs li').first().addClass('active')
+      $('.tab-pane').first().addClass('active')
+
+      $('.accordion').click(function() {
+        $(this).button('toggle');
+        if($(this).text() == 'Accordion: off') {
+          $(this).siblings('.panel').children('.collapse').collapse('hide');
+          $(this).text('Accordion: on');
+          $(this).siblings('.panel').find('a').click(function() {
+            $(this).parents('.panel').siblings('.panel').children('.collapse').collapse('hide');
+          });
+        }
+        else {
+          $(this).text('Accordion: off');
+          $(this).siblings('.panel').find('a').off('click');
+        }
+      })
+      $('.my-show').click(function() {
+        $(this).siblings('.panel').children('.collapse').collapse('show');
+      })
+      $('.my-hide').click(function() {
+        $(this).siblings('.panel').children('.collapse').collapse('hide');
+      })
+    })
+    </script>
+  </head>
+
+  <body>
+    <div id="main">
+      <!-- Nav tabs -->
+      <ul class="nav nav-tabs">
+        {% for ip in ip_dict %}
+          <li><a href="#{{ ip.replace('.', '') }}" data-toggle="tab">{{ ip }}</a></li>
+        {% endfor %}
+      </ul>
+
+      <!-- Tab panes -->
+      <div class="tab-content">
+        {% for ip in ip_dict %}
+          <div class="tab-pane" id="{{ ip.replace('.', '') }}">
+            <div class="panel-group" id="accordion{{ ip.replace('.', '') }}" >
+              <button class="btn btn-default accordion">Accordion: off</button>
+              <button class="btn btn-default my-show">Show</button>
+              <button class="btn btn-default my-hide">Hide</button>
+              {% for item in ip_dict[ip] %}
+                <div class="panel panel-default">
+                  <div class="panel-heading" id="heading{{ ip.replace('.', '') }}{{ loop.index }}">
+                    <h4 class="panel-title">
+                      <a data-toggle="collapse" href="#collapse{{ ip.replace('.', '') }}{{ loop.index }}">
+                        {{ item[0] }}
+                      </a>
+                    </h4>
+                  </div>
+
+                  <div id="collapse{{ ip.replace('.', '') }}{{ loop.index }}" class="panel-collapse collapse">
+                    <div class="panel-body">
+                      {{ item[1] }}
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </body>
+</html>
