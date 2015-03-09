@@ -24,4 +24,4 @@ def hello():
     return 'Ans: ' + ' + '.join([str(f) + '^' + str(e) for f, e in factors.iteritems()])
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True)
+    app.run(host='0.0.0.0', threaded=True)
