@@ -3,32 +3,25 @@ app = Flask(__name__)
 
 from time import sleep
 import random
+from sympy import factorint
 
 from raincheck import RainCheck
 rc = RainCheck(name='all', queue_size=3, time_pause=1, time_interval=10, threads=1, key='this is secret key')
 
-@app.route('/')
+@app.route('/rc_prime')
 @rc.raincheck()
 def index():
-    sleep(5)
-    a = int(request.args.get('a', ''))
-    b = int(request.args.get('b', ''))
+    prime = int(request.args.get('p', ''))
+    factors = factorint(prime)
 
-    return 'Index Page ' + str(a + b)
+    return 'Ans: ' + ' + '.join([str(f) + '^' + str(e) for f, e in factors.iteritems()])
 
-@app.route('/hello')
+@app.route('/prime')
 def hello():
-    return 'Hello Page'
+    prime = int(request.args.get('p', ''))
+    factors = factorint(prime)
 
-@app.route('/user/<username>')
-def show_user_profile(username):
-    # show the user profile for that user
-    return 'User %s' % username
-
-@app.route('/post/<int:post_id>')
-def show_post(post_id):
-    # show the post with the given id, the id is an integer
-    return 'Post %d' % post_id
+    return 'Ans: ' + ' + '.join([str(f) + '^' + str(e) for f, e in factors.iteritems()])
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
