@@ -11,25 +11,24 @@ import webbrowser
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-a', '--action')
-parser.add_argument('-t', '--target', default='localhost')
-parser.add_argument('-p', '--port', default='5000')
+parser.add_argument('-A', '--action')
+parser.add_argument('-u', '--url', default='http://localhost:5000/rc_prime')
+parser.add_argument('-a', '--args', default='p=33839528068037464891')
+parser.add_argument('-n', '--clients', default=10, type=int)
 args = parser.parse_args()
 
 def randips(n):
     return [inet_ntoa(pack('!I', i)) for i in sample(xrange(2**32), n)]
 
-CLIENTS = 10
-
 if args.action != 'render':
     processes = []
-    ips = randips(CLIENTS)
+    ips = randips(args.clients)
 
     for file_name in glob('log/*'):
         unlink(file_name)
 
     for ip in ips:
-        processes.append(Popen(['phantomjs', 'client.js', args.target, args.port, ip], stdout=open('log/' + ip, 'w')))
+        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=open('log/' + ip, 'w')))
 
     for p in processes:
         p.wait()

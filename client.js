@@ -10,7 +10,7 @@ page.onLoadFinished = function(status) {
     console.log(page.plainText);
     console.log('>>>\n');
 
-    if(page.plainText.search("Index Page") != -1 || page.plainText.search("Invalid") != -1) {
+    if(page.plainText.search("Time") != -1 || page.plainText.search("Invalid") != -1) {
         phantom.exit()
     }
 };
@@ -25,4 +25,4 @@ page.onResourceReceived = function(response) {
     }
 };
 
-page.open('http://' + args[1] + ':' + args[2] + '/?a=1&b=2&ip=' + args[3]);
+page.open(args[1]);
