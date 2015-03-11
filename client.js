@@ -2,27 +2,35 @@ var system = require('system');
 var args = system.args;
 var page = require('webpage').create();
 
+log = [];
 count = 0;
 
 page.onLoadFinished = function(status) {
     count++;
-    console.log('>>> request ' + count + ', time spend: ' + time_diff + 's');
-    console.log(page.plainText);
-    console.log('>>>\n');
+    log.push({"request": count, "timeSpend": timeDiff, "content": page.plainText});
 
     if(page.plainText.search("Time") != -1 || page.plainText.search("Invalid") != -1) {
-        phantom.exit()
+        timeEndPage = new Date()
+        console.log(JSON.stringify({
+            "totalRequests": count,
+            "timeStart": timeStartPage.toLocaleTimeString(),
+            "timeEnd": timeEndPage.toLocaleTimeString(),
+            "timeSpend": (timeEndPage - timeStartPage)/1000,
+            "log": log
+        }));
+        phantom.exit();
     }
 };
 
 page.onResourceRequested = function(requestData, networkRequest) {
-    time_start = requestData['time'];
+    timeStartRequest = requestData['time'];
 };
 
 page.onResourceReceived = function(response) {
     if(response.stage == 'end') {
-        time_diff = (response['time'] - time_start)/1000;
+        timeDiff = (response['time'] - timeStartRequest)/1000;
     }
 };
 
+timeStartPage = new Date();
 page.open(args[1]);

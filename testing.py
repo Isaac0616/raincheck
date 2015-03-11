@@ -9,6 +9,7 @@ import re
 import jinja2
 import webbrowser
 import argparse
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-A', '--action')
@@ -20,6 +21,7 @@ args = parser.parse_args()
 def randips(n):
     return [inet_ntoa(pack('!I', i)) for i in sample(xrange(2**32), n)]
 
+ip_dict = {}
 if args.action != 'render':
     processes = []
     ips = randips(args.clients)
@@ -28,16 +30,10 @@ if args.action != 'render':
         unlink(file_name)
 
     for ip in ips:
-        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=open('log/' + ip, 'w')))
+        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=PIPE))
 
-    for p in processes:
-        p.wait()
-
-ip_dict = {}
-for file_name in glob('log/*'):
-    with open(file_name) as f:
-        s = f.read()
-    ip_dict[file_name[4:]] = re.findall(r'>>> (.*?)\n(.*?)>>>', s, re.DOTALL)
+    for p, ip in zip(processes, ips):
+        ip_dict[ip] = json.loads(p.communicate()[0])
 
 
 templateLoader = jinja2.FileSystemLoader(searchpath="./")
