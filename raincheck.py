@@ -191,12 +191,12 @@ class RainCheck():
             raise ShouldNotBeHereError('State can only be ready or cancel')
 
     def validate(self, client_id, timestamp, time_start, time_end, mac):
-        if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, timestamp, time_start, time_end]), hashlib.sha256).digest()), str(mac)):
+        if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, str(timestamp), str(time_start), str(time_end)]), hashlib.sha256).digest()), str(mac)):
             return 'MAC verification fail'
         if g.ip != client_id:
             return 'Client ID mismatch'
         current_time = time.time()
-        if current_time < float(time_start) or current_time > float(time_end):
+        if current_time < time_start or current_time > time_end:
             return 'Not in the lifetime'
         if client_id in self.buffered:
             return 'Request is in Buffered'
@@ -242,14 +242,18 @@ class RainCheck():
                     return resp
 
                 # parse raincheck
-                try:
-                    client_id, timestamp, time_start, time_end, mac = request.cookies.get('raincheck#' + request.path).split('#')
-                except:
+                raincheck_list = request.cookies.get('raincheck#' + request.path).split('#')
+                if len(raincheck_list) != 5:
                     resp = make_response(render_template(template,
                         status='Invalid raincheck',
                         detail='raincheck format error',
                         rank=None))
                     return resp
+                client_id = raincheck_list[0]
+                timestamp = float(raincheck_list[1])
+                time_start = float(raincheck_list[2])
+                time_end = float(raincheck_list[3])
+                mac = raincheck_list[4]
 
                 # validate raincheck
                 error = self.validate(client_id, timestamp, time_start, time_end, mac)
@@ -260,12 +264,12 @@ class RainCheck():
                         rank=None))
                     return resp
 
-                resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
+                resp = self.enqueue(client_id, timestamp, func, *args, **keywords)
                 if not resp:
                     resp = make_response(render_template(template,
                         status='Retrying',
                         detail='The queue is full and your priority is not high enough',
-                        rank=self.rank(float(timestamp))))
+                        rank=self.rank(timestamp)))
                     resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                 return resp
