@@ -217,35 +217,55 @@ class RainCheck():
         return self.fms.rank(priority)
 
     def raincheck(self, template='raincheck.html'):
+        """Decorator for apply rain check to a function
+
+        Args:
+            template: Html template for showing intermediate information
+                to client. Following arguments are provided: status, detail
+                and rank.
+        """
         def decorator(func):
             @wraps(func)
             def decorated_func(*args, **keywords):
-                testing_ip = request.args.get('ip')
-                if testing_ip:
-                    g.ip = testing_ip
-                else:
-                    g.ip = request.remote_addr
+                # Client can provide testing IP by GET's 'ip' argument.
+                # If not provided, use real IP.
+                g.ip = request.args.get('ip', request.remote_addr)
 
+                # No raincheck. Client request for the first time.
                 if request.cookies.get('raincheck#' + request.path) == None:
-                    resp = make_response(render_template(template, status='First time request', detail='Get the raincheck', rank=self.rank(INF)))
+                    resp = make_response(render_template(template,
+                        status='First time request',
+                        detail='Get the raincheck',
+                        rank=self.rank(INF)))
                     resp.headers['Refresh'] = self.time_pause
                     resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
                     return resp
 
-                # may need to clear cookie
+                # parse raincheck
                 try:
                     client_id, timestamp, time_start, time_end, mac = request.cookies.get('raincheck#' + request.path).split('#')
                 except:
-                    resp = make_response(render_template(template, status='Invalid raincheck', detail='raincheck format error', rank=None))
+                    resp = make_response(render_template(template,
+                        status='Invalid raincheck',
+                        detail='raincheck format error',
+                        rank=None))
                     return resp
+
+                # validate raincheck
                 error = self.validate(client_id, timestamp, time_start, time_end, mac)
                 if error:
-                    resp = make_response(render_template(template, status='Invalid raincheck', detail=error, rank=None))
+                    resp = make_response(render_template(template,
+                        status='Invalid raincheck',
+                        detail=error,
+                        rank=None))
                     return resp
 
                 resp = self.enqueue(client_id, float(timestamp), func, *args, **keywords)
                 if not resp:
-                    resp = make_response(render_template(template, status='Retrying', detail='The queue is full and your priority is not high enough', rank=self.rank(float(timestamp))))
+                    resp = make_response(render_template(template,
+                        status='Retrying',
+                        detail='The queue is full and your priority is not high enough',
+                        rank=self.rank(float(timestamp))))
                     resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                 return resp
