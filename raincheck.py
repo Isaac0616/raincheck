@@ -33,7 +33,7 @@ class TicketQueue():
         self.mutex = Lock()
         self.not_empty = Condition(self.mutex)
 
-    def add(self, priority, id):
+    def add(self, id, priority):
         with self.mutex:
             ticket = Ticket(priority, id)
             self.queue.add(ticket)
@@ -187,33 +187,33 @@ class RainCheck():
         self.concurrency = concurrency
         self.key = key
 
-        self.rb_manager = ReadyBufferManager()
-        self.rb_manager.start()
-        self.ready = self.rb_manager.ReadyBuffer(self.max_age, self.concurrency)
-        self.accepted = ExpireSet(self.max_age)
-        self.fms = FMSketch(self.max_age)
+        self._rb_manager = ReadyBufferManager()
+        self._rb_manager.start()
+        self._ready = self._rb_manager.ReadyBuffer(self.max_age, self.concurrency)
+        self._accepted = ExpireSet(self.max_age)
+        self._fms = FMSketch(self.max_age)
 
-        self.tq_manager = TicketQueueManager()
-        self.tq_manager.start()
-        self.queue = self.tq_manager.TicketQueue(self.queue_size)
+        self._tq_manager = TicketQueueManager()
+        self._tq_manager.start()
+        self._queue = self._tq_manager.TicketQueue(self.queue_size)
 
-        self.worker = Process(target=self._work)
-        self.worker.start()
+        self._worker = Process(target=self._work)
+        self._worker.start()
 
     def _work(self):
         try:
             while True:
-                id = self.queue.get().get_id()
-                self.ready.add(id)
-                self.queue.pop()
+                id = self._queue.get().get_id()
+                self._ready.add(id)
+                self._queue.pop()
         except:
             pass
 
-    def enqueue(self, client_id, priority):
-        self.fms.add(client_id, priority)
-        self.queue.add(priority, client_id)
+    def _enqueue(self, client_id, priority):
+        self._fms.add(client_id, priority)
+        self._queue.add(client_id, priority)
 
-    def validate(self, client_id, timestamp, time_start, time_end, mac):
+    def _validate(self, client_id, timestamp, time_start, time_end, mac):
         if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, str(timestamp), str(time_start), str(time_end)]), hashlib.sha256).digest()), str(mac)):
             return 'MAC verification fail'
         if g.ip != client_id:
@@ -222,7 +222,7 @@ class RainCheck():
         if current_time < time_start or current_time > time_end:
             return 'Not in the lifetime'
 
-    def issue(self, timestamp=None):
+    def _issue(self, timestamp=None):
         current_time = time.time()
         time_start = current_time + self.time_pause
         time_end = time_start + self.time_interval
@@ -252,9 +252,9 @@ class RainCheck():
                     resp = make_response(render_template(template,
                         status='First time request',
                         detail='Get the raincheck',
-                        rank=self.fms.rank(INF)))
+                        rank=self._fms.rank(INF)))
                     resp.headers['Refresh'] = self.time_pause
-                    resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
+                    resp.set_cookie('raincheck#' + request.path, self._issue(), max_age=self.max_age)
                     return resp
 
                 # parse raincheck
@@ -272,7 +272,7 @@ class RainCheck():
                 mac = raincheck_list[4]
 
                 # validate raincheck
-                error = self.validate(client_id, timestamp, time_start, time_end, mac)
+                error = self._validate(client_id, timestamp, time_start, time_end, mac)
                 if error:
                     resp = make_response(render_template(template,
                         status='Invalid raincheck',
@@ -284,23 +284,23 @@ class RainCheck():
                 # gives the corresponding respond.
 
                 # In queue: retry later
-                if self.queue.contain(client_id):
+                if self._queue.contain(client_id):
                     resp = make_response(render_template(template,
                         status='Retrying',
                         detail='In buffer',
-                        rank=self.fms.rank(timestamp)))
+                        rank=self._fms.rank(timestamp)))
                     resp.headers['Refresh'] = self.time_refresh
-                    resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
+                    resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
                     return resp
 
                 # Ready: execute the original server function
                 # Executing: reject to simultaneously execute another request
                 #     from the same client
-                state = self.ready.set_executing(client_id)
+                state = self._ready.set_executing(client_id)
                 if state == 'READY':
                     resp = func(*args, **keywords)
-                    self.accepted.add(client_id)
-                    self.ready.remove(client_id)
+                    self._accepted.add(client_id)
+                    self._ready.remove(client_id)
                     return resp
                 elif state == 'EXECUTING':
                     resp = make_response(render_template(template,
@@ -311,7 +311,7 @@ class RainCheck():
 
                 # accepted: reject to execute another request from the same
                 #     client in a short period
-                if client_id in self.accepted:
+                if client_id in self._accepted:
                     resp = make_response(render_template(template,
                         status='Invalid raincheck',
                         detail='Request is in Accepted',
@@ -320,14 +320,14 @@ class RainCheck():
 
                 # Request is in neither queue, ready buffer nor accepted buffer.
                 # Enqueue the request and retry later.
-                self.enqueue(client_id, timestamp)
+                self._enqueue(client_id, timestamp)
 
                 resp = make_response(render_template(template,
                     status='Retrying',
                     detail='Try to enqueue',
-                    rank=self.fms.rank(timestamp)))
+                    rank=self._fms.rank(timestamp)))
                 resp.headers['Refresh'] = self.time_refresh
-                resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
+                resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
                 return resp
 
             return decorated_func
