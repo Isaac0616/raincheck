@@ -177,13 +177,13 @@ class FMSketch():
 
 
 class RainCheck():
-    def __init__(self, name, queue_size, time_pause, time_interval, concurrency=1, key=os.urandom(16)):
-        self.name = name
+    def __init__(self, queue_size, time_pause, time_interval, concurrency=1, key=os.urandom(16)):
+        """Initialize the RainCheck class"""
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
         self.time_refresh = (self.time_pause + self.time_interval)/2
-        self.max_age = self.time_pause + self.time_interval # may need longer
+        self.max_age = self.time_pause + self.time_interval
         self.concurrency = concurrency
         self.key = key
 
@@ -201,6 +201,7 @@ class RainCheck():
         self._worker.start()
 
     def _work(self):
+        """Method executing by the background worker process."""
         try:
             while True:
                 id = self._queue.get().get_id()
@@ -210,11 +211,30 @@ class RainCheck():
             pass
 
     def _enqueue(self, client_id, priority):
+        """Add the request to priority queue."""
         self._fms.add(client_id, priority)
         self._queue.add(client_id, priority)
 
     def _validate(self, client_id, timestamp, time_start, time_end, mac):
-        if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, str(timestamp), str(time_start), str(time_end)]), hashlib.sha256).digest()), str(mac)):
+        """Validate the raincheck.
+
+        Args:
+            Fileds parse from raincheck.
+
+        Returns:
+            None if validation successes.
+            Error message if validation fails.
+        """
+        if not hmac.compare_digest(
+            b64encode(
+                hmac.new(
+                    self.key,
+                    '#'.join([client_id, str(timestamp), str(time_start), str(time_end)]),
+                    hashlib.sha256
+                ).digest()
+            ),
+            str(mac)
+        ):
             return 'MAC verification fail'
         if g.ip != client_id:
             return 'Client ID mismatch'
@@ -223,6 +243,15 @@ class RainCheck():
             return 'Not in the lifetime'
 
     def _issue(self, timestamp=None):
+        """Issue the raincheck.
+
+        Args:
+            timestamp: Timestamp argument in raincheck. If not provided (new raincheck
+            for first time request), use current time as timestamp.
+
+        Returns:
+            Raincheck string.
+        """
         current_time = time.time()
         time_start = current_time + self.time_pause
         time_end = time_start + self.time_interval
