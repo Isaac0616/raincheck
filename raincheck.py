@@ -232,9 +232,6 @@ class RainCheck():
             message = '#'.join([g.ip, str(timestamp), str(time_start), str(time_end)])
         return message + '#' + b64encode(hmac.new(self.key, message, hashlib.sha256).digest())
 
-    def rank(self, priority):
-        return self.fms.rank(priority)
-
     def raincheck(self, template='raincheck.html'):
         """Decorator for apply rain check to a function
 
@@ -255,7 +252,7 @@ class RainCheck():
                     resp = make_response(render_template(template,
                         status='First time request',
                         detail='Get the raincheck',
-                        rank=self.rank(INF)))
+                        rank=self.fms.rank(INF)))
                     resp.headers['Refresh'] = self.time_pause
                     resp.set_cookie('raincheck#' + request.path, self.issue(), max_age=self.max_age)
                     return resp
@@ -291,7 +288,7 @@ class RainCheck():
                     resp = make_response(render_template(template,
                         status='Retrying',
                         detail='In buffer',
-                        rank=self.rank(timestamp)))
+                        rank=self.fms.rank(timestamp)))
                     resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                     return resp
@@ -328,7 +325,7 @@ class RainCheck():
                 resp = make_response(render_template(template,
                     status='Retrying',
                     detail='Try to enqueue',
-                    rank=self.rank(timestamp)))
+                    rank=self.fms.rank(timestamp)))
                 resp.headers['Refresh'] = self.time_refresh
                 resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                 return resp
