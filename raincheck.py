@@ -172,9 +172,6 @@ class FMSketch():
     def _ip2int(self, ip):
         return struct.unpack("!I", socket.inet_aton(ip))[0]
 
-    def __str__(self):
-        return str(self.array)
-
 
 class RainCheck():
     def __init__(self, queue_size, time_pause, time_interval, concurrency=1, key=os.urandom(16)):
