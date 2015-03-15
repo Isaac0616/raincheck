@@ -6,7 +6,7 @@ from sympy import factorint
 from multiprocessing import Process, Queue
 
 from raincheck import RainCheck
-rc = RainCheck(name='all', queue_size=3, time_pause=1, time_interval=10, threads=1, key='this is secret key')
+rc = RainCheck(name='all', queue_size=3, time_pause=1, time_interval=10, concurrency=1, key='this is secret key')
 
 
 def factor(q, prime):

@@ -13,71 +13,59 @@ import socket
 
 INF = 2147483647
 
-class ShouldNotBeHereError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-    def __str__(self):
-        return repr(self.msg)
-
 class Ticket():
-    def __init__(self, priority):
+    def __init__(self, priority, id):
         self.priority = priority
-        self.state = 'initial'
-        self.dequeue = Event()
-
-    def cancel(self):
-        self.state = 'cancel'
-        self.dequeue.set()
-
-    def ready(self):
-        self.state = 'ready'
-        self.dequeue.set()
+        self.id = id
 
     def get_priority(self):
         return self.priority
 
-    def get_state(self):
-        self.dequeue.wait()
-        return self.state
-
-class TicketManager(BaseManager):
-    pass
-
-TicketManager.register('Ticket', Ticket)
-
+    def get_id(self):
+        return self.id
 
 class TicketQueue():
     def __init__(self, max_size):
-        self.queue = sortedlist(key=lambda x: x.get_priority())
         self.max_size = max_size
+        self.queue = sortedlist(key=lambda x: x.get_priority())
+        self.id_set = set()
+
         self.mutex = Lock()
         self.not_empty = Condition(self.mutex)
-        self.manager = TicketManager()
-        self.manager.start()
 
-    def wait(self, priority):
+    def add(self, priority, id):
         with self.mutex:
-            ticket = self.manager.Ticket(priority)
+            ticket = Ticket(priority, id)
             self.queue.add(ticket)
-            if len(self.queue) > self.max_size:
-                self.queue.pop(-1).cancel()
-            self.not_empty.notify()
-        return ticket.get_state()
+            self.id_set.add(id)
 
-    def serve_next(self):
+            if len(self.queue) > self.max_size:
+                ticket = self.queue.pop(-1)
+                self.id_set.remove(ticket.get_id())
+
+            self.not_empty.notify()
+
+    def get(self):
         with self.not_empty:
             if len(self.queue) == 0:
                 self.not_empty.wait()
-            self.queue.pop(0).ready()
+            ticket = self.queue[0]
+            return ticket
 
-    def __contains__(self, item):
-        return item in self.queue
+    def pop(self):
+        with self.not_empty:
+            if len(self.queue) == 0:
+                self.not_empty.wait()
+            self.id_set.remove(self.queue.pop(0).get_id())
+
+    def contain(self, id):
+        with self.mutex:
+            return id in self.id_set
 
 class TicketQueueManager(BaseManager):
     pass
 
 TicketQueueManager.register('TicketQueue', TicketQueue)
-
 
 
 class ExpireSet():
@@ -93,8 +81,10 @@ class ExpireSet():
     def add(self, value, expire_time=None):
         if not expire_time:
             expire_time = self.expire_time
+
         with self.mutex:
             self.set.add(value)
+
         if expire_time > 0:
             t = threading.Timer(expire_time, self.remove, args=(value, ))
             t.start()
@@ -103,8 +93,53 @@ class ExpireSet():
         with self.mutex:
             return value in self.set
 
-    def __str__(self):
-        return str(self.set)
+class ReadyBuffer():
+    def __init__(self, expire_time, max_size):
+        self.buffer = {}
+        self.expire_time = expire_time
+        self.max_size = max_size
+        self.mutex = Lock()
+        self.not_full = Condition(self.mutex)
+
+    def expire(self, value):
+        with self.mutex:
+            if self.buffer[value]['state'] != 'executing':
+                self.buffer.pop(value)
+                self.not_full.notify()
+
+    def remove(self, value):
+        with self.mutex:
+            self.buffer.pop(value)
+            self.not_full.notify()
+
+    def add(self, value, expire_time=None):
+        if not expire_time:
+            expire_time = self.expire_time
+
+        with self.not_full:
+            if len(self.buffer) > self.max_size:
+                self.not_full.wait()
+
+            t = threading.Timer(expire_time, self.expire, args=(value, ))
+            self.buffer[value] = {'timer': t, 'state': 'READY'}
+            t.start()
+
+    # TODO: Need a better method name
+    def set_executing(self, value):
+        with self.mutex:
+            if not self.buffer.has_key(value):
+                return 'NOT_READY'
+            elif self.buffer[value]['state'] == 'EXECUTING':
+                return 'EXECUTING'
+            else:
+                self.buffer[value]['timer'].cancel()
+                self.buffer[value]['state'] = 'EXECUTING'
+                return 'READY'
+
+class ReadyBufferManager(BaseManager):
+    pass
+
+ReadyBufferManager.register('ReadyBuffer', ReadyBuffer)
 
 
 class FMSketch():
@@ -142,24 +177,25 @@ class FMSketch():
 
 
 class RainCheck():
-    def __init__(self, name, queue_size, time_pause, time_interval, threads=1, key=os.urandom(16)):
+    def __init__(self, name, queue_size, time_pause, time_interval, concurrency=1, key=os.urandom(16)):
         self.name = name
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
         self.time_refresh = (self.time_pause + self.time_interval)/2
         self.max_age = self.time_pause + self.time_interval # may need longer
-        self.threads = threads
+        self.concurrency = concurrency
         self.key = key
 
+        self.rb_manager = ReadyBufferManager()
+        self.rb_manager.start()
+        self.ready = self.rb_manager.ReadyBuffer(self.max_age, self.concurrency)
         self.accepted = ExpireSet(self.max_age)
-        self.buffered = ExpireSet(-1)
         self.fms = FMSketch(self.max_age)
 
-        self.pool_sema = Semaphore(threads)
-        self.manager = TicketQueueManager()
-        self.manager.start()
-        self.queue = self.manager.TicketQueue(self.queue_size)
+        self.tq_manager = TicketQueueManager()
+        self.tq_manager.start()
+        self.queue = self.tq_manager.TicketQueue(self.queue_size)
 
         self.worker = Process(target=self._work)
         self.worker.start()
@@ -167,28 +203,15 @@ class RainCheck():
     def _work(self):
         try:
             while True:
-                self.pool_sema.acquire()
-                self.queue.serve_next()
+                id = self.queue.get().get_id()
+                self.ready.add(id)
+                self.queue.pop()
         except:
             pass
 
-    def enqueue(self, client_id, priority, target, *args, **keywords):
+    def enqueue(self, client_id, priority):
         self.fms.add(client_id, priority)
-        self.buffered.add(client_id)
-        state = self.queue.wait(priority)
-
-        if state == 'ready':
-            try:
-                resp = target(*args, **keywords)
-            finally:
-                self.pool_sema.release()
-                self.accepted.add(client_id)
-                self.buffered.remove(client_id)
-            return resp
-        elif state == 'cancel':
-            self.buffered.remove(client_id)
-        else:
-            raise ShouldNotBeHereError('State can only be ready or cancel')
+        self.queue.add(priority, client_id)
 
     def validate(self, client_id, timestamp, time_start, time_end, mac):
         if not hmac.compare_digest(b64encode(hmac.new(self.key, '#'.join([client_id, str(timestamp), str(time_start), str(time_end)]), hashlib.sha256).digest()), str(mac)):
@@ -198,10 +221,6 @@ class RainCheck():
         current_time = time.time()
         if current_time < time_start or current_time > time_end:
             return 'Not in the lifetime'
-        if client_id in self.buffered:
-            return 'Request is in Buffered'
-        if client_id in self.accepted:
-            return 'Request is in Accepted'
 
     def issue(self, timestamp=None):
         current_time = time.time()
@@ -210,7 +229,7 @@ class RainCheck():
         if timestamp == None:
             message = '#'.join([g.ip, str(current_time), str(time_start), str(time_end)])
         else:
-            message = '#'.join([g.ip, timestamp, str(time_start), str(time_end)])
+            message = '#'.join([g.ip, str(timestamp), str(time_start), str(time_end)])
         return message + '#' + b64encode(hmac.new(self.key, message, hashlib.sha256).digest())
 
     def rank(self, priority):
@@ -221,13 +240,13 @@ class RainCheck():
 
         Args:
             template: Html template for showing intermediate information
-                to client. Following arguments are provided: status, detail
-                and rank.
+                to client. Following arguments are provided as jinja2 variables:
+                status, detail and rank.
         """
         def decorator(func):
             @wraps(func)
             def decorated_func(*args, **keywords):
-                # Client can provide testing IP by GET's 'ip' argument.
+                # Client can provide testing IP by 'ip' argument of GET.
                 # If not provided, use real IP.
                 g.ip = request.args.get('ip', request.remote_addr)
 
@@ -264,14 +283,55 @@ class RainCheck():
                         rank=None))
                     return resp
 
-                resp = self.enqueue(client_id, timestamp, func, *args, **keywords)
-                if not resp:
+                # Following code checks the status of client's request and
+                # gives the corresponding respond.
+
+                # In queue: retry later
+                if self.queue.contain(client_id):
                     resp = make_response(render_template(template,
                         status='Retrying',
-                        detail='The queue is full and your priority is not high enough',
+                        detail='In buffer',
                         rank=self.rank(timestamp)))
                     resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
+                    return resp
+
+                # Ready: execute the original server function
+                # Executing: reject to simultaneously execute another request
+                #     from the same client
+                state = self.ready.set_executing(client_id)
+                if state == 'READY':
+                    resp = func(*args, **keywords)
+                    self.accepted.add(client_id)
+                    self.ready.remove(client_id)
+                    return resp
+                elif state == 'EXECUTING':
+                    resp = make_response(render_template(template,
+                        status='Invalid raincheck',
+                        detail='Request is proccessing',
+                        rank=None))
+                    return resp
+
+                # accepted: reject to execute another request from the same
+                #     client in a short period
+                if client_id in self.accepted:
+                    resp = make_response(render_template(template,
+                        status='Invalid raincheck',
+                        detail='Request is in Accepted',
+                        rank=None))
+                    return resp
+
+                # Request is in neither queue, ready buffer nor accepted buffer.
+                # Enqueue the request and retry later.
+                self.enqueue(client_id, timestamp)
+
+                resp = make_response(render_template(template,
+                    status='Retrying',
+                    detail='Try to enqueue',
+                    rank=self.rank(timestamp)))
+                resp.headers['Refresh'] = self.time_refresh
+                resp.set_cookie('raincheck#' + request.path, self.issue(timestamp), max_age=self.max_age)
                 return resp
+
             return decorated_func
         return decorator
