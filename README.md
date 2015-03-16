@@ -2,7 +2,7 @@
 **Caution:** This project is still in early development. APIs and architecture may change frequently.
 
 This project implement Raincheck Filters described in **_"RainCheck Filters: A Practical System for Guaranteed Access in the Presence of DDoS Attacks and Flash Crowds"_** base on [Flask (A Python Microframework)](http://flask.pocoo.org/).
-For more information, please refer the paper.
+For more information, please refer to the paper.
 
 ## Requirement
 ### Python
@@ -25,7 +25,7 @@ pip install sympy
 
 ### For testing
 Require `PhantomJS`.  
-Please refer <http://phantomjs.org> to install PhantomJS.
+Please refer to <http://phantomjs.org> to install PhantomJS.
 If you are using OS X, you can use [Homebrew](http://brew.sh/) to install it.
 
 ```
@@ -76,7 +76,7 @@ def hello():
 ```
 
 There is an optional ```template``` argument for ```raincheck``` decorator which should be the name of a [Jinja2](http://jinja.pocoo.org) template to customize intermediate response page for RainCheck.
-Please refer default template ```templates/raincheck.html``` to see the simple example.
+Please refer to default template ```templates/raincheck.html``` to see the simple example.
 
 Putting all together.
 
