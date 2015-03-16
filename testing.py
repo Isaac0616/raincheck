@@ -12,7 +12,6 @@ import argparse
 import json
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-A', '--action')
 parser.add_argument('-u', '--url', default='http://localhost:5000/rc_prime')
 parser.add_argument('-a', '--args', default='p=33839528068037464891')
 parser.add_argument('-n', '--clients', default=10, type=int)
@@ -22,18 +21,15 @@ def randips(n):
     return [inet_ntoa(pack('!I', i)) for i in sample(xrange(2**32), n)]
 
 ip_dict = {}
-if args.action != 'render':
-    processes = []
-    ips = randips(args.clients)
+processes = []
 
-    for file_name in glob('log/*'):
-        unlink(file_name)
+ips = randips(args.clients)
 
-    for ip in ips:
-        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=PIPE))
+for ip in ips:
+    processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=PIPE))
 
-    for p, ip in zip(processes, ips):
-        ip_dict[ip] = json.loads(p.communicate()[0])
+for p, ip in zip(processes, ips):
+    ip_dict[ip] = json.loads(p.communicate()[0])
 
 
 templateLoader = jinja2.FileSystemLoader(searchpath="./")
