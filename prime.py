@@ -14,7 +14,7 @@ def factor(q, prime):
 
 @app.route('/rc_prime')
 @rc.raincheck()
-def index():
+def rc_prime():
     prime = int(request.args.get('p', ''))
 
     ts = time()
@@ -33,7 +33,7 @@ def index():
     return 'Time spend: ' + str(time_spend) + '<br>Ans: ' + ' + '.join([str(f) + '^' + str(e) for f, e in factors.iteritems()])
 
 @app.route('/prime')
-def hello():
+def prime():
     prime = int(request.args.get('p', ''))
 
     ts = time()
