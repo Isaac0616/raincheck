@@ -207,4 +207,4 @@ There are several diffrence from original paper currently to use out of the box 
 
 ## License
 
-See the [LICENSE](LICENSE.txt) file for license rights and limitations (MIT).
+See the [LICENSE](LICENSE.md) file for license rights and limitations (MIT).
