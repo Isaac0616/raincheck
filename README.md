@@ -50,7 +50,7 @@ if __name__ == "__main__":
     app.run()
 ```
 
-Now assume there are some computing intensive jobs in ```hello``` and need to protect by RainCheck.
+Now assume there are some computing intensive jobs in ```hello``` and need to be protected by RainCheck.
 First, import ```RainCheck``` class from ```raincheck``` module and create an instance with appropriate configuration.
 
 ```python
@@ -167,10 +167,21 @@ raincheck
 TODO.
 
 ## Implementation Details
-TODO.
+There are several diffrence from original paper currently to use out of the box python library or easier implementation.
+
+- using ```blist``` (balanced tree) instead of min-max heap
+- using HMAC instead of CBC-MAC
+- using hash table instead of bloom filter
+- adding timestamp to FMSketch instead of clearing it periodically
+- only use one FMSketch
+- using python Timer to do fine-grained expiration
 
 ## Future work
-TODO.
+- integrate with login for client identification
+- compute client's rank with lower overhead method
+- more sophisticated testing utility
+- evaluate the usage of HTML5 WebSockets
+- improve performance
 
 ## License
 TODO.
