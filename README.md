@@ -1,29 +1,39 @@
 # RainCheck Filters
+
 **Caution:** This project is still in early development. APIs and architecture may change frequently.
 
 This project implement Raincheck Filters described in **_"RainCheck Filters: A Practical System for Guaranteed Access in the Presence of DDoS Attacks and Flash Crowds"_** base on [Flask (A Python Microframework)](http://flask.pocoo.org/).
 For more information, please refer to the paper.
 
+
 ## Requirement
+
 ### Python
+
 Require `Python >= 2.7.7`.  
 If you have problem with Python version, please try [pyenv](https://github.com/yyuu/pyenv) or [virtualenv](http://docs.python-guide.org/en/latest/dev/virtualenvs/).
 
+
 ### For raincheck module
+
 Require `blist`, `Flask`.
 
 ```
 pip install blist Flask
 ```
 
+
 ### For sample server
+
 Require extra `SymPy`.
 
 ```
 pip install sympy
 ```
 
+
 ### For testing
+
 Require `PhantomJS`.  
 Please refer to <http://phantomjs.org> to install PhantomJS.
 If you are using OS X, you can use [Homebrew](http://brew.sh/) to install it.
@@ -31,6 +41,7 @@ If you are using OS X, you can use [Homebrew](http://brew.sh/) to install it.
 ```
 brew install phantomjs
 ```
+
 
 ## Usage
 
@@ -103,7 +114,9 @@ Finally, run the server by:
 python hello.py
 ```
 
+
 ### sample server
+
 ```prime.py``` in the repository is a sample web server to show the usage of RainCheck.
 Run it as normal:
 
@@ -124,8 +137,8 @@ in several seconds.
 Then, try <http://localhost:5000/rc_prime?p=33839528068037464891> to see the interaction between browser and RainCheck filter.
 
 
-
 ### testing
+
 Currently just support a simple scenario as following:
 
 ```
@@ -140,7 +153,9 @@ Arguments:
 - ```--args```, ```-a```: GET arguments. For multiple arguments, write them in the same string seperate by ```&```. For example, ```--args "a=1&b=2"```. (default: ```p=33839528068037464891```)
 - ```--clients```, ```-n```: Number of clients. (default: ```10```)
 
+
 ## File Organization
+
 ```
 raincheck
 ├── README.md
@@ -163,10 +178,14 @@ raincheck
 - ```log.html```: Output of ```testing.py``` which records access logs of every clients. (Not include in repository)
 - ```log_template.html```: Jinja2 template to generate ```log.html```
 
+
 ## Architecture
+
 TODO.
 
+
 ## Implementation Details
+
 There are several diffrence from original paper currently to use out of the box python library or easier implementation.
 
 - using ```blist``` (balanced tree) instead of min-max heap
@@ -176,12 +195,16 @@ There are several diffrence from original paper currently to use out of the box 
 - only use one FMSketch
 - using python Timer to do fine-grained expiration
 
+
 ## Future work
+
 - integrate with login for client identification
 - compute client's rank with lower overhead method
 - more sophisticated testing utility
 - evaluate the usage of HTML5 WebSockets
 - improve performance
 
+
 ## License
-TODO.
+
+See the [LICENSE](LICENSE.txt) file for license rights and limitations (MIT).
