@@ -18,18 +18,12 @@ class Ticket():
         self.priority = priority
         self.id = id
 
-    def get_priority(self):
-        return self.priority
-
-    def get_id(self):
-        return self.id
-
 class TicketQueue():
     def __init__(self, queue_size, ready_size, expire_time):
         self.queue_size = queue_size
         self.ready_size = ready_size
         self.expire_time = expire_time
-        self.queue = sortedlist(key=lambda x: x.get_priority())
+        self.queue = sortedlist(key=lambda x: x.priority)
         self.id_state = {}
         self.timers = {}
         self.num_ready = 0
@@ -44,7 +38,7 @@ class TicketQueue():
             self.id_state[id] = 'queue'
 
             if len(self.queue) > self.queue_size:
-                self.id_state.pop(self.queue.pop(-1).get_id())
+                self.id_state.pop(self.queue.pop(-1).id)
 
             self.queue_not_empty.notify()
 
@@ -61,7 +55,7 @@ class TicketQueue():
         with self.queue_not_empty:
             if len(self.queue) == 0:
                 self.queue_not_empty.wait()
-            id = self.queue.pop(0).get_id()
+            id = self.queue.pop(0).id
 
         with self.ready_not_full:
             if self.num_ready >= self.ready_size:
