@@ -25,121 +25,79 @@ class Ticket():
         return self.id
 
 class TicketQueue():
-    def __init__(self, max_size):
-        self.max_size = max_size
+    def __init__(self, queue_size, ready_size, expire_time):
+        self.queue_size = queue_size
+        self.ready_size = ready_size
+        self.expire_time = expire_time
         self.queue = sortedlist(key=lambda x: x.get_priority())
-        self.id_set = set()
+        self.id_state = {}
+        self.timers = {}
+        self.num_ready = 0
 
         self.mutex = Lock()
-        self.not_empty = Condition(self.mutex)
+        self.queue_not_empty = Condition(self.mutex)
+        self.ready_not_full = Condition(self.mutex)
 
     def add(self, id, priority):
         with self.mutex:
-            ticket = Ticket(priority, id)
-            self.queue.add(ticket)
-            self.id_set.add(id)
+            self.queue.add(Ticket(priority, id))
+            self.id_state[id] = 'queue'
 
-            if len(self.queue) > self.max_size:
-                ticket = self.queue.pop(-1)
-                self.id_set.remove(ticket.get_id())
+            if len(self.queue) > self.queue_size:
+                self.id_state.pop(self.queue.pop(-1).get_id())
 
-            self.not_empty.notify()
+            self.queue_not_empty.notify()
 
-    def get(self):
-        with self.not_empty:
-            if len(self.queue) == 0:
-                self.not_empty.wait()
-            ticket = self.queue[0]
-            return ticket
-
-    def pop(self):
-        with self.not_empty:
-            if len(self.queue) == 0:
-                self.not_empty.wait()
-            self.id_set.remove(self.queue.pop(0).get_id())
-
-    def contain(self, id):
+    def expire(self, id):
         with self.mutex:
-            return id in self.id_set
+            if self.id_state[id] == 'ready':
+                self.id_state.pop(id)
+                self.timers.pop(id)
+            elif self.id_state[id] == 'accepted':
+                self.id_state.pop(id)
+
+
+    def set_ready(self):
+        with self.queue_not_empty:
+            if len(self.queue) == 0:
+                self.queue_not_empty.wait()
+            id = self.queue.pop(0).get_id()
+
+        with self.ready_not_full:
+            if self.num_ready >= self.ready_size:
+                self.ready_not_full.wait()
+            self.id_state[id] = 'ready'
+            self.num_ready += 1
+
+            t = threading.Timer(self.expire_time, self.expire, args=(id, ))
+            self.timers[id] = t
+            t.start()
+
+    def set_executing(self, id):
+        with self.mutex:
+            if self.id_state[id] == 'ready':
+                self.timers[id].cancel()
+                self.timers.pop(id)
+                self.id_state[id] = 'executing'
+                return True
+            else:
+                return False
+
+    def set_accepted(self, id):
+        with self.mutex:
+            self.id_state[id] = 'accepted'
+            self.num_ready -= 1
+            self.ready_not_full.notify()
+            threading.Timer(self.expire_time, self.expire, args=(id, )).start()
+
+    def get_state(self, id):
+        with self.mutex:
+            return self.id_state.get(id, 'nonexistent')
 
 class TicketQueueManager(BaseManager):
     pass
 
 TicketQueueManager.register('TicketQueue', TicketQueue)
-
-
-class ExpireSet():
-    def __init__(self, expire_time):
-        self.set = set()
-        self.expire_time = expire_time
-        self.mutex = Lock()
-
-    def remove(self, value):
-        with self.mutex:
-            self.set.remove(value)
-
-    def add(self, value, expire_time=None):
-        if not expire_time:
-            expire_time = self.expire_time
-
-        with self.mutex:
-            self.set.add(value)
-
-        if expire_time > 0:
-            t = threading.Timer(expire_time, self.remove, args=(value, ))
-            t.start()
-
-    def __contains__(self, value):
-        with self.mutex:
-            return value in self.set
-
-class ReadyBuffer():
-    def __init__(self, expire_time, max_size):
-        self.buffer = {}
-        self.expire_time = expire_time
-        self.max_size = max_size
-        self.mutex = Lock()
-        self.not_full = Condition(self.mutex)
-
-    def expire(self, value):
-        with self.mutex:
-            if self.buffer[value]['state'] != 'executing':
-                self.buffer.pop(value)
-                self.not_full.notify()
-
-    def remove(self, value):
-        with self.mutex:
-            self.buffer.pop(value)
-            self.not_full.notify()
-
-    def add(self, value, expire_time=None):
-        if not expire_time:
-            expire_time = self.expire_time
-
-        with self.not_full:
-            if len(self.buffer) > self.max_size:
-                self.not_full.wait()
-
-            t = threading.Timer(expire_time, self.expire, args=(value, ))
-            self.buffer[value] = {'timer': t, 'state': 'READY'}
-            t.start()
-
-    # TODO: Need a better method name
-    def set_executing(self, value):
-        with self.mutex:
-            if not self.buffer.has_key(value):
-                return 'NOT_READY'
-            elif self.buffer[value]['state'] == 'EXECUTING':
-                return 'EXECUTING'
-            else:
-                self.buffer[value]['timer'].cancel()
-                self.buffer[value]['state'] = 'EXECUTING'
-                return 'READY'
-
-class ReadyBufferManager(BaseManager):
-    pass
-
-ReadyBufferManager.register('ReadyBuffer', ReadyBuffer)
 
 
 class FMSketch():
@@ -184,26 +142,22 @@ class RainCheck():
         self.concurrency = concurrency
         self.key = key
 
-        self._rb_manager = ReadyBufferManager()
-        self._rb_manager.start()
-        self._ready = self._rb_manager.ReadyBuffer(self.max_age, self.concurrency)
-        self._accepted = ExpireSet(self.max_age)
-        self._fms = FMSketch(self.max_age)
-
         self._tq_manager = TicketQueueManager()
         self._tq_manager.start()
-        self._queue = self._tq_manager.TicketQueue(self.queue_size)
+        self._queue = self._tq_manager.TicketQueue(self.queue_size, self.concurrency, self.max_age)
+        self._fms = FMSketch(self.max_age)
 
         self._worker = Process(target=self._work)
         self._worker.start()
 
     def _work(self):
-        """Method executing by the background worker process."""
+        """
+        Method executing by the background worker process.
+        It will continuously try to set one request in ready state.
+        """
         try:
             while True:
-                id = self._queue.get().get_id()
-                self._ready.add(id)
-                self._queue.pop()
+                self._queue.set_ready()
         except:
             pass
 
@@ -309,52 +263,53 @@ class RainCheck():
                 # Following code checks the status of client's request and
                 # gives the corresponding respond.
 
+                state = self._queue.get_state(client_id)
+
                 # In queue: retry later
-                if self._queue.contain(client_id):
+                if state == 'queue':
                     resp = make_response(render_template(template,
                         status='Retrying',
                         detail='In buffer',
                         rank=self._fms.rank(timestamp)))
                     resp.headers['Refresh'] = self.time_refresh
                     resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
-                    return resp
-
                 # Ready: execute the original server function
+                elif state == 'ready':
+                    # set_executing may still fail due to concurrent request
+                    if self._queue.set_executing(client_id):
+                        resp = func(*args, **keywords)
+                        self._queue.set_accepted(client_id)
+                    else:
+                        resp = make_response(render_template(template,
+                            status='Invalid raincheck',
+                            detail='Request is proccessing',
+                            rank=None))
                 # Executing: reject to simultaneously execute another request
                 #     from the same client
-                state = self._ready.set_executing(client_id)
-                if state == 'READY':
-                    resp = func(*args, **keywords)
-                    self._accepted.add(client_id)
-                    self._ready.remove(client_id)
-                    return resp
-                elif state == 'EXECUTING':
+                elif state == 'executing':
                     resp = make_response(render_template(template,
                         status='Invalid raincheck',
                         detail='Request is proccessing',
                         rank=None))
-                    return resp
-
                 # accepted: reject to execute another request from the same
                 #     client in a short period
-                if client_id in self._accepted:
+                elif state == 'accepted':
                     resp = make_response(render_template(template,
                         status='Invalid raincheck',
                         detail='Request is in Accepted',
                         rank=None))
-                    return resp
+                # Request is not in queue.
+                # Enqueue the request and let client retry later.
+                elif state == 'nonexistent':
+                    self._enqueue(client_id, timestamp)
 
-                # Request is in neither queue, ready buffer nor accepted buffer.
-                # Enqueue the request and retry later.
-                self._enqueue(client_id, timestamp)
+                    resp = make_response(render_template(template,
+                        status='Retrying',
+                        detail='Try to enqueue',
+                        rank=self._fms.rank(timestamp)))
+                    resp.headers['Refresh'] = self.time_refresh
+                    resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
 
-                resp = make_response(render_template(template,
-                    status='Retrying',
-                    detail='Try to enqueue',
-                    rank=self._fms.rank(timestamp)))
-                resp.headers['Refresh'] = self.time_refresh
-                resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
                 return resp
-
             return decorated_func
         return decorator
