@@ -11,8 +11,6 @@ import os
 import struct
 import socket
 
-INF = 2147483647
-
 class Ticket():
     def __init__(self, priority, id):
         self.priority = priority
@@ -115,6 +113,13 @@ class FMSketch():
             for i in range(self._sketch_size):
                 if self.array[i]['modify_time'] < current_time - self.time_interval or \
                    self.array[i]['priority'] >= priority:
+                       return (2**i)*1.2928
+
+    def lowest_rank(self):
+        current_time = time.time()
+        with self.mutex:
+            for i in range(self._sketch_size):
+                if self.array[i]['modify_time'] < current_time - self.time_interval:
                        return (2**i)*1.2928
 
     def _trailing_zeros(self, client_id):
@@ -226,7 +231,7 @@ class RainCheck():
                     resp = make_response(render_template(template,
                         status='First time request',
                         detail='Get the raincheck',
-                        rank=self._fms.rank(INF)))
+                        rank=self._fms.lowest_rank()))
                     resp.headers['Refresh'] = self.time_pause
                     resp.set_cookie('raincheck#' + request.path, self._issue(), max_age=self.max_age)
                     return resp
