@@ -2,9 +2,12 @@
   <head>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/plug-ins/f2c75b7247b/integration/bootstrap/3/dataTables.bootstrap.css">
 
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.5/js/jquery.dataTables.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/plug-ins/f2c75b7247b/integration/bootstrap/3/dataTables.bootstrap.js"></script>
 
     <style>
     #main {
@@ -15,6 +18,12 @@
     button {
       outline: 0 !important;
       margin: 5 5 5 0px !important;
+    }
+
+    #summary {
+      margin: 20 auto 0 auto;
+      width: 50%;
+      text-align: center;
     }
 
     .panel-body {
@@ -35,6 +44,11 @@
       $('.collapse').collapse();
       $('.nav-tabs li').first().addClass('active')
       $('.tab-pane').first().addClass('active')
+      $('#summary-table').DataTable({
+        'paging': false,
+        'order': [[1, 'asc']],
+        'info': false
+      });
 
       $('.accordion').click(function() {
         $(this).button('toggle');
@@ -64,6 +78,7 @@
     <div id="main">
       <!-- Nav tabs -->
       <ul class="nav nav-tabs">
+        <li><a href="#summary" data-toggle="tab">Statistic</a></li>
         {% for ip in ip_dict %}
         <li><a href="#{{ ip.replace('.', '') }}" data-toggle="tab">{{ ip }}</a></li>
         {% endfor %}
@@ -71,6 +86,31 @@
 
       <!-- Tab panes -->
       <div class="tab-content">
+        <div class="tab-pane" id="summary">
+          <table id="summary-table" class="table table-striped">
+            <thead>
+              <tr>
+                <td>IP</td>
+                <td>time spend</td>
+                <td>requests</td>
+                <td>start</td>
+                <td>end</td>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ip in ip_dict %}
+              <tr>
+                <td>{{ ip }}</td>
+                <td>{{ ip_dict[ip]["timeSpend"] }}</td>
+                <td>{{ ip_dict[ip]["totalRequests"] }}</td>
+                <td>{{ ip_dict[ip]["timeStart"] }}</td>
+                <td>{{ ip_dict[ip]["timeEnd"] }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
         {% for ip in ip_dict %}
         <div class="tab-pane" id="{{ ip.replace('.', '') }}">
           <div class="panel-group" id="accordion{{ ip.replace('.', '') }}" >
