@@ -80,7 +80,7 @@
       <ul class="nav nav-tabs">
         <li><a href="#summary" data-toggle="tab">Statistic</a></li>
         {% for ip in ip_dict %}
-        <li><a href="#{{ ip.replace('.', '') }}" data-toggle="tab">{{ ip }}</a></li>
+        <li><a href="#{{ ip.replace('.', '_') }}" data-toggle="tab">{{ ip }}</a></li>
         {% endfor %}
       </ul>
 
@@ -112,8 +112,8 @@
         </div>
 
         {% for ip in ip_dict %}
-        <div class="tab-pane" id="{{ ip.replace('.', '') }}">
-          <div class="panel-group" id="accordion{{ ip.replace('.', '') }}" >
+        <div class="tab-pane" id="{{ ip.replace('.', '_') }}">
+          <div class="panel-group" id="accordion{{ ip.replace('.', '_') }}" >
 
             <div class="panel panel-default statistic">
               <div class="panel-heading">
@@ -134,15 +134,15 @@
 
             {% for item in ip_dict[ip]["log"] %}
             <div class="panel panel-default">
-              <div class="panel-heading" id="heading{{ ip.replace('.', '') }}{{ loop.index }}">
+              <div class="panel-heading" id="heading{{ ip.replace('.', '_') }}{{ loop.index }}">
                 <h4 class="panel-title">
-                  <a data-toggle="collapse" href="#collapse{{ ip.replace('.', '') }}{{ loop.index }}">
+                  <a data-toggle="collapse" href="#collapse{{ ip.replace('.', '_') }}{{ loop.index }}">
                     Request {{ item["request"] }}, Time spend: {{ item["timeSpend"] }}s
                   </a>
                 </h4>
               </div>
 
-              <div id="collapse{{ ip.replace('.', '') }}{{ loop.index }}" class="panel-collapse collapse">
+              <div id="collapse{{ ip.replace('.', '_') }}{{ loop.index }}" class="panel-collapse collapse">
                 <div class="panel-body"><!--
                -->{{ item["content"] }}
                 </div>
