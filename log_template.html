@@ -50,6 +50,11 @@
         'info': false
       });
 
+      $('tbody a').click(function() {
+        $("li a[href=" + $(this).attr("href") + "]").tab('show');
+        return false;
+      });
+
       $('.accordion').click(function() {
         $(this).button('toggle');
         if($(this).text() == 'Accordion: off') {
@@ -100,7 +105,7 @@
             <tbody>
               {% for ip in ip_dict %}
               <tr>
-                <td>{{ ip }}</td>
+                <td><a href="#{{ ip.replace('.', '_') }}">{{ ip }}</a></td>
                 <td>{{ ip_dict[ip]["timeSpend"] }}</td>
                 <td>{{ ip_dict[ip]["totalRequests"] }}</td>
                 <td>{{ ip_dict[ip]["timeStart"] }}</td>
