@@ -2,11 +2,10 @@ from subprocess import Popen, PIPE
 from socket import inet_ntoa
 from random import sample
 from struct import pack
-from glob import glob
-from os import unlink
 from os.path import abspath
 from time import sleep
-import re
+from datetime import datetime
+from collections import defaultdict
 import jinja2
 import webbrowser
 import argparse
@@ -24,6 +23,12 @@ def randips(n):
     return [inet_ntoa(pack('!I', i)) for i in sample(xrange(2**32), n)]
 
 ip_dict = {}
+chart_data = {}
+chart_data['Served Time'] = []
+chart_data['Average Time Spend'] = []
+chart_data['x1'] = []
+chart_data['x2'] = []
+time_spend = []
 processes = []
 
 ips = randips(args.clients*args.repeat)
@@ -35,13 +40,31 @@ for i in range(args.repeat):
     sleep(args.period)
 
 for p, ip in zip(processes, ips):
-    ip_dict[ip] = json.loads(p.communicate()[0])
+    output = json.loads(p.communicate()[0])
+    chart_data['Served Time'].append(output['timeEnd'])
+    time_spend.append(output['timeSpend'])
+    chart_data['x1'].append(output['timeStart'])
 
+    output['timeEnd'] = datetime.fromtimestamp(output['timeEnd']).strftime("%H:%M:%S.%f")[:-3]
+    output['timeStart'] = datetime.fromtimestamp(output['timeStart']).strftime("%H:%M:%S.%f")[:-3]
+    ip_dict[ip] = output
+
+test_begin = min(chart_data['x1'])
+chart_data['Served Time'] = [round(t - test_begin, 3) for t in chart_data['Served Time']]
+chart_data['x1'] = [round(t - test_begin, 3) for t in chart_data['x1']]
+
+tmp_dict = defaultdict(list)
+for x, t in zip(chart_data['x1'], time_spend):
+    tmp_dict[round(x)].append(t)
+
+for k, l in tmp_dict.iteritems():
+    chart_data['x2'].append(k)
+    chart_data['Average Time Spend'].append(sum(l)/float(len(l)))
 
 templateLoader = jinja2.FileSystemLoader(searchpath="./")
 templateEnv = jinja2.Environment(loader=templateLoader)
 template = templateEnv.get_template('log_template.html')
 
 with open('log.html', 'w') as log:
-    log.write(template.render(ip_dict=ip_dict))
+    log.write(template.render(ip_dict=ip_dict, chart_data=chart_data))
 webbrowser.open('file://' + abspath('log.html'))

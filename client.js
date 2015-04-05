@@ -13,8 +13,8 @@ page.onLoadFinished = function(status) {
         timeEndPage = new Date()
         console.log(JSON.stringify({
             "totalRequests": count,
-            "timeStart": timeStartPage.toLocaleTimeString(),
-            "timeEnd": timeEndPage.toLocaleTimeString(),
+            "timeStart": timeStartPage.getTime()/1000,
+            "timeEnd": timeEndPage.getTime()/1000,
             "timeSpend": (timeEndPage - timeStartPage)/1000,
             "log": log
         }));
