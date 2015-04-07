@@ -14,6 +14,7 @@ import json
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--url', default='http://localhost:5000/rc_prime')
 parser.add_argument('-a', '--args', default='p=33839528068037464891')
+parser.add_argument('-o', '--output', default='log.html')
 parser.add_argument('-n', '--clients', default=5, type=int)
 parser.add_argument('-r', '--repeat', default=10, type=int)
 parser.add_argument('-p', '--period', default=1, type=int)
@@ -47,8 +48,8 @@ for i in range(args.repeat):
 for p, ip in zip(processes, ips):
     output = json.loads(p.communicate()[0])
     chart_data['Served Time'].append(output['timeEnd'])
-    time_spend.append(output['timeSpend'])
     chart_data['x1'].append(output['timeStart'])
+    time_spend.append(output['timeSpend'])
 
     output['timeEnd'] = datetime.fromtimestamp(output['timeEnd']).strftime("%H:%M:%S.%f")[:-3]
     output['timeStart'] = datetime.fromtimestamp(output['timeStart']).strftime("%H:%M:%S.%f")[:-3]
@@ -73,6 +74,6 @@ if args.detail_log:
 else:
     template = templateEnv.get_template('statistic_template.html')
 
-with open('log.html', 'w') as log:
+with open(args.output, 'w') as log:
     log.write(template.render(ip_dict=ip_dict, chart_data=chart_data))
-webbrowser.open('file://' + abspath('log.html'))
+webbrowser.open('file://' + abspath(args.output))
