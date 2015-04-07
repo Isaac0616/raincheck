@@ -17,7 +17,7 @@ parser.add_argument('-a', '--args', default='p=33839528068037464891')
 parser.add_argument('-o', '--output', default='log.html')
 parser.add_argument('-n', '--clients', default=5, type=int)
 parser.add_argument('-r', '--repeat', default=10, type=int)
-parser.add_argument('-p', '--period', default=1, type=int)
+parser.add_argument('-p', '--period', default=1, type=float)
 parser.add_argument('-d', '--detail-log', action='store_true')
 args = parser.parse_args()
 
