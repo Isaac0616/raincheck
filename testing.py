@@ -17,6 +17,7 @@ parser.add_argument('-a', '--args', default='p=33839528068037464891')
 parser.add_argument('-n', '--clients', default=5, type=int)
 parser.add_argument('-r', '--repeat', default=10, type=int)
 parser.add_argument('-p', '--period', default=1, type=int)
+parser.add_argument('-d', '--detail-log', action='store_true')
 args = parser.parse_args()
 
 def randips(n):
@@ -33,9 +34,13 @@ processes = []
 
 ips = randips(args.clients*args.repeat)
 
+additional_args = []
+if args.detail_log:
+    additional_args.append('--detail-log')
+
 for i in range(args.repeat):
     for ip in ips[i*args.clients:(i+1)*args.clients]:
-        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip], stdout=PIPE))
+        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip] + additional_args, stdout=PIPE))
 
     sleep(args.period)
 
@@ -63,7 +68,10 @@ for k, l in tmp_dict.iteritems():
 
 templateLoader = jinja2.FileSystemLoader(searchpath="./")
 templateEnv = jinja2.Environment(loader=templateLoader)
-template = templateEnv.get_template('log_template.html')
+if args.detail_log:
+    template = templateEnv.get_template('log_template.html')
+else:
+    template = templateEnv.get_template('statistic_template.html')
 
 with open('log.html', 'w') as log:
     log.write(template.render(ip_dict=ip_dict, chart_data=chart_data))

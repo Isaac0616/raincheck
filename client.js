@@ -7,17 +7,22 @@ count = 0;
 
 page.onLoadFinished = function(status) {
     count++;
-    log.push({"request": count, "timeSpend": timeDiff, "content": page.plainText});
+    if(args[2] == '--detail-log') {
+        log.push({"request": count, "timeSpend": timeDiff, "content": page.plainText});
+    }
 
     if(page.plainText.search("Time") != -1 || page.plainText.search("Invalid") != -1) {
-        timeEndPage = new Date()
-        console.log(JSON.stringify({
+        timeEndPage = new Date();
+        output = {
             "totalRequests": count,
             "timeStart": timeStartPage.getTime()/1000,
             "timeEnd": timeEndPage.getTime()/1000,
-            "timeSpend": (timeEndPage - timeStartPage)/1000,
-            "log": log
-        }));
+            "timeSpend": (timeEndPage - timeStartPage)/1000
+        };
+        if(args[2] == '--detail-log') {
+            output.log = log;
+        }
+        console.log(JSON.stringify(output));
         phantom.exit();
     }
 };
