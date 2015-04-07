@@ -45,6 +45,7 @@ class TicketQueue():
             if self.id_state[id] == 'ready':
                 self.id_state.pop(id)
                 self.timers.pop(id)
+                self.num_ready -= 1
             elif self.id_state[id] == 'accepted':
                 self.id_state.pop(id)
 
