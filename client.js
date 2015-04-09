@@ -5,6 +5,12 @@ var page = require('webpage').create();
 log = [];
 count = 0;
 
+page.settings.resourceTimeout = 45000;
+page.onResourceTimeout = function(e) {
+    console.error(e.errorCode, ': ', e.errorString);
+    phantom.exit(1);
+};
+
 page.onLoadFinished = function(status) {
     count++;
     if(args[2] == '--detail-log') {
