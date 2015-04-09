@@ -7,29 +7,42 @@ count = 0;
 
 page.settings.resourceTimeout = 45000;
 page.onResourceTimeout = function(e) {
-    console.error(e.errorCode, ': ', e.errorString);
-    phantom.exit(1);
+    console.error('Resource Timeout: ' + e.errorString + ' (' + e.errorCode + ')');
+};
+
+page.onResourceError = function(e) {
+    console.error('Resource Error: ' + e.errorString + ' (' + e.errorCode + ')');
 };
 
 page.onLoadFinished = function(status) {
-    count++;
-    if(args[2] == '--detail-log') {
-        log.push({"request": count, "timeSpend": timeDiff, "content": page.plainText});
+    if(status != 'success') {
+        phantom.exit(1);
     }
-
-    if(page.plainText.search("Time") != -1 || page.plainText.search("Invalid") != -1) {
-        timeEndPage = new Date();
-        output = {
-            "totalRequests": count,
-            "timeStart": timeStartPage.getTime()/1000,
-            "timeEnd": timeEndPage.getTime()/1000,
-            "timeSpend": (timeEndPage - timeStartPage)/1000
-        };
+    else {
+        count++;
         if(args[2] == '--detail-log') {
-            output.log = log;
+            log.push({'request': count, 'timeSpend': timeDiff, 'content': page.plainText});
         }
-        console.log(JSON.stringify(output));
-        phantom.exit();
+
+        if(page.plainText.search('Time') != -1 || page.plainText.search('Invalid') != -1) {
+            timeEndPage = new Date();
+            timeSpend = (timeEndPage - timeStartPage)/1000;
+
+            output = {
+                'totalRequests': count,
+                'timeStart': timeStartPage/1000,
+                'timeEnd': timeEndPage/1000,
+                'timeSpend': timeSpend
+            };
+            if(args[2] == '--detail-log') {
+                output.log = log;
+            }
+
+            console.log(JSON.stringify(output));
+            console.error(args[1].match(/(\d+\.){3}\d+/g) + ': ' + timeSpend + 's');
+
+            phantom.exit();
+        }
     }
 };
 
