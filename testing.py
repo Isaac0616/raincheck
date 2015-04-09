@@ -19,6 +19,7 @@ parser.add_argument('-n', '--clients', default=5, type=int)
 parser.add_argument('-r', '--repeat', default=10, type=int)
 parser.add_argument('-p', '--period', default=1, type=float)
 parser.add_argument('-d', '--detail-log', action='store_true')
+parser.add_argument('--open', action='store_true')
 args = parser.parse_args()
 
 def randips(n):
@@ -76,4 +77,6 @@ else:
 
 with open(args.output, 'w') as log:
     log.write(template.render(ip_dict=ip_dict, chart_data=chart_data))
-webbrowser.open('file://' + abspath(args.output))
+
+if args.open:
+    webbrowser.open('file://' + abspath(args.output))
