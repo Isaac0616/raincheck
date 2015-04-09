@@ -7,11 +7,11 @@ count = 0;
 
 page.settings.resourceTimeout = 45000;
 page.onResourceTimeout = function(e) {
-    console.error('Resource Timeout: ' + e.errorString + ' (' + e.errorCode + ')');
+    system.stderr.writeLine('Resource Timeout: ' + e.errorString + ' (' + e.errorCode + ')');
 };
 
 page.onResourceError = function(e) {
-    console.error('Resource Error: ' + e.errorString + ' (' + e.errorCode + ')');
+    system.stderr.writeLine('Resource Error: ' + e.errorString + ' (' + e.errorCode + ')');
 };
 
 page.onLoadFinished = function(status) {
@@ -39,7 +39,7 @@ page.onLoadFinished = function(status) {
             }
 
             console.log(JSON.stringify(output));
-            console.error(args[1].match(/(\d+\.){3}\d+/g) + ': ' + timeSpend + 's');
+            system.stderr.writeLine(args[1].match(/(\d+\.){3}\d+/g) + ': ' + timeSpend + 's');
 
             phantom.exit();
         }
