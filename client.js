@@ -39,7 +39,7 @@ page.onLoadFinished = function(status) {
             }
 
             console.log(JSON.stringify(output));
-            system.stderr.writeLine(args[1].match(/(\d+\.){3}\d+/g) + ': ' + timeSpend + 's');
+            system.stderr.writeLine(args[1].match(/ip=(\d+\.){3}\d+/g)[0].slice(3) + ': ' + timeSpend + 's');
 
             phantom.exit();
         }
