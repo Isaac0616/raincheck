@@ -4,6 +4,7 @@ var page = require('webpage').create();
 
 log = [];
 count = 0;
+result = '';
 
 page.settings.resourceTimeout = 45000;
 page.onResourceTimeout = function(e) {
@@ -24,7 +25,17 @@ page.onLoadFinished = function(status) {
             log.push({'request': count, 'timeSpend': timeDiff, 'content': page.plainText});
         }
 
-        if(page.plainText.search('Time') != -1 || page.plainText.search('Invalid') != -1) {
+        if(page.plainText.search('Time spend') != -1) {
+            result = 'Success';
+        }
+        else if(page.plainText.search('Time out') != -1) {
+            result = 'Time out';
+        }
+        else if(page.plainText.search('Invalid') != -1) {
+            result = 'Invalid';
+        }
+
+        if(result != '') {
             timeEndPage = new Date();
             timeSpend = (timeEndPage - timeStartPage)/1000;
 
@@ -32,7 +43,8 @@ page.onLoadFinished = function(status) {
                 'totalRequests': count,
                 'timeStart': timeStartPage/1000,
                 'timeEnd': timeEndPage/1000,
-                'timeSpend': timeSpend
+                'timeSpend': timeSpend,
+                'result': result
             };
             if(args[2] == '--detail-log') {
                 output.log = log;
