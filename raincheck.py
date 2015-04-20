@@ -4,6 +4,7 @@ from multiprocessing import Process, Lock, Condition, Event, Semaphore
 from multiprocessing.managers import BaseManager
 from flask import abort, make_response, request, render_template, g
 from base64 import b64encode
+from random import uniform
 import hmac, hashlib
 import time
 import threading
@@ -137,7 +138,6 @@ class RainCheck():
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
-        self.time_refresh = (self.time_pause + self.time_interval)/2
         self.max_age = self.time_pause + self.time_interval
         self.concurrency = concurrency
         self.key = key
@@ -271,7 +271,7 @@ class RainCheck():
                         status='Retrying',
                         detail='In buffer',
                         rank=self._fms.rank(timestamp)))
-                    resp.headers['Refresh'] = self.time_refresh
+                    resp.headers['Refresh'] = uniform(self.time_pause, self.max_age - 1)
                     resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
                 # Ready: execute the original server function
                 elif state == 'ready':
@@ -307,7 +307,7 @@ class RainCheck():
                         status='Retrying',
                         detail='Try to enqueue',
                         rank=self._fms.rank(timestamp)))
-                    resp.headers['Refresh'] = self.time_refresh
+                    resp.headers['Refresh'] = uniform(self.time_pause, self.max_age - 1)
                     resp.set_cookie('raincheck#' + request.path, self._issue(timestamp), max_age=self.max_age)
 
                 return resp
