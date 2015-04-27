@@ -2,7 +2,7 @@ from blist import sortedlist
 from functools import wraps
 from multiprocessing import Process, Lock, Condition, Event, Semaphore
 from multiprocessing.managers import BaseManager
-from flask import abort, make_response, request, render_template, g
+from flask import abort, make_response, request, render_template, session
 from base64 import b64encode
 from random import uniform
 from pyhashxx import hashxx
@@ -132,12 +132,13 @@ class FMSketch():
 
 
 class RainCheck():
-    def __init__(self, queue_size, time_pause, time_interval, concurrency=1, key=os.urandom(16)):
+    def __init__(self, queue_size, time_pause, time_interval, identification='rc_ip', concurrency=1, key=os.urandom(16)):
         """Initialize the RainCheck class"""
         self.queue_size = queue_size
         self.time_pause = time_pause
         self.time_interval = time_interval
         self.max_age = self.time_pause + self.time_interval
+        self.identification = identification
         self.concurrency = concurrency
         self.key = key
 
@@ -186,7 +187,7 @@ class RainCheck():
             mac
         ):
             return 'MAC verification fail'
-        if g.ip != client_id:
+        if session[self.identification] != client_id:
             return 'Client ID mismatch'
         current_time = time.time()
         if current_time < time_start or current_time > time_end:
@@ -206,9 +207,9 @@ class RainCheck():
         time_start = current_time + self.time_pause
         time_end = time_start + self.time_interval
         if timestamp == None:
-            message = '#'.join([g.ip, str(current_time), str(time_start), str(time_end)])
+            message = '#'.join([session[self.identification], str(current_time), str(time_start), str(time_end)])
         else:
-            message = '#'.join([g.ip, str(timestamp), str(time_start), str(time_end)])
+            message = '#'.join([session[self.identification], str(timestamp), str(time_start), str(time_end)])
         return message + '#' + b64encode(hmac.new(self.key, message, hashlib.sha256).digest())
 
     def raincheck(self, template='raincheck.html'):
@@ -224,7 +225,7 @@ class RainCheck():
             def decorated_func(*args, **keywords):
                 # Client can provide testing IP by 'ip' argument of GET.
                 # If not provided, use real IP.
-                g.ip = request.args.get('ip', request.remote_addr)
+                session['rc_ip'] = request.args.get('ip', request.remote_addr)
 
                 # No raincheck. Client request for the first time.
                 if request.cookies.get('raincheck#' + request.path) == None:
