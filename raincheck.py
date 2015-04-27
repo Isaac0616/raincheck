@@ -5,6 +5,7 @@ from multiprocessing.managers import BaseManager
 from flask import abort, make_response, request, render_template, g
 from base64 import b64encode
 from random import uniform
+from pyhashxx import hashxx
 import hmac, hashlib
 import time
 import threading
@@ -126,11 +127,8 @@ class FMSketch():
                        return (2**i)*1.2928
 
     def _trailing_zeros(self, client_id):
-        binary = bin(self._ip2int(client_id))
+        binary = bin(hashxx(client_id))
         return len(binary) - binary.rfind('1') - 1
-
-    def _ip2int(self, ip):
-        return struct.unpack("!I", socket.inet_aton(ip))[0]
 
 
 class RainCheck():
@@ -185,7 +183,7 @@ class RainCheck():
                     hashlib.sha256
                 ).digest()
             ),
-            str(mac)
+            mac
         ):
             return 'MAC verification fail'
         if g.ip != client_id:
@@ -246,11 +244,11 @@ class RainCheck():
                         detail='raincheck format error',
                         rank=None))
                     return resp
-                client_id = raincheck_list[0]
+                client_id = str(raincheck_list[0])
                 timestamp = float(raincheck_list[1])
                 time_start = float(raincheck_list[2])
                 time_end = float(raincheck_list[3])
-                mac = raincheck_list[4]
+                mac = str(raincheck_list[4])
 
                 # validate raincheck
                 error = self._validate(client_id, timestamp, time_start, time_end, mac)
