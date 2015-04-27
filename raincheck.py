@@ -52,14 +52,15 @@ class TicketQueue():
 
 
     def set_ready(self):
-        with self.queue_not_empty:
-            if len(self.queue) == 0:
-                self.queue_not_empty.wait()
-            id = self.queue.pop(0).id
-
         with self.ready_not_full:
             if self.num_ready >= self.ready_size:
                 self.ready_not_full.wait()
+
+        with self.queue_not_empty:
+            if len(self.queue) == 0:
+                self.queue_not_empty.wait()
+
+            id = self.queue.pop(0).id
             self.id_state[id] = 'ready'
             self.num_ready += 1
 
