@@ -4,11 +4,19 @@ app = Flask(__name__)
 from time import time
 from sympy import factorint
 from multiprocessing import Process, Queue
+from functools import wraps
 
 from raincheck import RainCheck
 rc = RainCheck(queue_size=3, time_pause=1, time_interval=10, concurrency=1, key='this is secret key')
 rc_login = RainCheck(queue_size=3, time_pause=1, time_interval=10, identification='username', concurrency=3, key='this is secret key')
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'username' not in session:
+            return redirect(url_for('login', p=request.args.get('p', '')))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def factor(q, prime):
     q.put(factorint(prime))
@@ -41,17 +49,16 @@ def prime():
     return prime_body()
 
 @app.route('/login_prime')
+@login_required
 @rc_login.raincheck()
 def login_prime():
-    if 'username' not in session:
-        return redirect(url_for('login'))
     return prime_body()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         session['username'] = request.form['username']
-        return 'Hi, you are logged in as ' + session['username'] + '.'
+        return redirect(url_for('login_prime', p=request.args.get('p', '')))
     return '''
         <form action="" method="post">
             <p><input type=text name=username>
