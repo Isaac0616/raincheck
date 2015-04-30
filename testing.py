@@ -19,11 +19,15 @@ parser.add_argument('-n', '--clients', default=5, type=int)
 parser.add_argument('-r', '--repeat', default=10, type=int)
 parser.add_argument('-p', '--period', default=1, type=float)
 parser.add_argument('-d', '--detail-log', action='store_true')
+parser.add_argument('--re', '--resolution', default=1, type=float)
 parser.add_argument('--open', action='store_true')
 args = parser.parse_args()
 
 def randips(n):
     return [inet_ntoa(pack('!I', i)) for i in sample(xrange(2**32), n)]
+
+def round_partial(value, resolution):
+    return round(value/resolution)*resolution
 
 ip_dict = {}
 chart_data = {}
@@ -62,7 +66,7 @@ chart_data['x1'] = [round(t - test_begin, 3) for t in chart_data['x1']]
 
 tmp_dict = defaultdict(list)
 for x, t in zip(chart_data['x1'], time_spend):
-    tmp_dict[round(x)].append(t)
+    tmp_dict[round_partial(x, args.re)].append(t)
 
 for k, l in tmp_dict.iteritems():
     chart_data['x2'].append(k)
