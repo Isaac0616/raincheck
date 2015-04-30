@@ -3,17 +3,23 @@ app = Flask(__name__)
 
 from time import time
 from sympy import factorint
-from multiprocessing import Process, Queue, BoundedSemaphore
+from multiprocessing import Process, Queue, BoundedSemaphore, Manager
 from functools import wraps
 from random import uniform
 
 BUFFER_SIZE = 3
+CONCURRENCY = 1
 TPAUSE=1
 TINTERVAL=10
 
 from raincheck import RainCheck
-rc = RainCheck(queue_size=BUFFER_SIZE, time_pause=TPAUSE, time_interval=TINTERVAL, concurrency=1, key='this is secret key')
-rc_login = RainCheck(queue_size=BUFFER_SIZE, time_pause=TPAUSE, time_interval=TINTERVAL, identification='username', concurrency=1, key='this is secret key')
+rc = RainCheck(queue_size=BUFFER_SIZE, time_pause=TPAUSE, time_interval=TINTERVAL, concurrency=CONCURRENCY, key='this is secret key')
+rc_login = RainCheck(queue_size=BUFFER_SIZE, time_pause=TPAUSE, time_interval=TINTERVAL, identification='username', concurrency=CONCURRENCY, key='this is secret key')
+
+def rate_control(q, sema):
+    while(True):
+        sema.acquire()
+        q.get().set()
 
 def login_required(f):
     @wraps(f)
@@ -24,13 +30,22 @@ def login_required(f):
     return decorated_function
 
 def rate_limited(f):
-    sema = BoundedSemaphore(BUFFER_SIZE)
+    m = Manager()
+    sema = BoundedSemaphore(CONCURRENCY)
+    queue = Queue(BUFFER_SIZE)
+    Process(target=rate_control, args=(queue, sema)).start()
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not sema.acquire(False):
+        ready_exec = m.Event()
+        try:
+            queue.put_nowait(ready_exec)
+        except:
             resp = make_response('full')
             resp.headers['Refresh'] = uniform(TPAUSE, TINTERVAL - 1)
             return resp
+
+        ready_exec.wait()
         resp = f(*args, **kwargs)
         sema.release()
         return resp
