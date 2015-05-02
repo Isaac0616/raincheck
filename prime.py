@@ -42,7 +42,7 @@ def rate_limited(f):
             queue.put_nowait(ready_exec)
         except:
             resp = make_response('full')
-            resp.headers['Refresh'] = uniform(TPAUSE, TINTERVAL - 1)
+            resp.headers['Refresh'] = uniform(TPAUSE, TPAUSE + TINTERVAL - 1)
             return resp
 
         ready_exec.wait()
