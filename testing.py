@@ -10,6 +10,7 @@ import jinja2
 import webbrowser
 import argparse
 import json
+import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--url', default='http://localhost:5000/rc_prime')
@@ -20,6 +21,8 @@ parser.add_argument('-r', '--repeat', default=10, type=int)
 parser.add_argument('-p', '--period', default=1, type=float)
 parser.add_argument('-d', '--detail-log', action='store_true')
 parser.add_argument('--re', '--resolution', default=1, type=float)
+parser.add_argument('--arch', '--archieve', action='store_true')
+parser.add_argument('-l', '--load', nargs='+')
 parser.add_argument('--open', action='store_true')
 args = parser.parse_args()
 
@@ -44,21 +47,40 @@ additional_args = []
 if args.detail_log:
     additional_args.append('--detail-log')
 
-for i in range(args.repeat):
-    for ip in ips[i*args.clients:(i+1)*args.clients]:
-        processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip] + additional_args, stdout=PIPE))
+if not args.load:
+    for i in range(args.repeat):
+        for ip in ips[i*args.clients:(i+1)*args.clients]:
+            processes.append(Popen(['phantomjs', 'client.js', args.url + '?' + args.args + '&ip=' + ip] + additional_args, stdout=PIPE))
 
-    sleep(args.period)
+        sleep(args.period)
 
-for p, ip in zip(processes, ips):
-    output = json.loads(p.communicate()[0])
-    chart_data['Served Time'].append(output['timeEnd'])
-    chart_data['x1'].append(output['timeStart'])
-    time_spend.append(output['timeSpend'])
+    for p, ip in zip(processes, ips):
+        output = json.loads(p.communicate()[0])
+        chart_data['Served Time'].append(output['timeEnd'])
+        chart_data['x1'].append(output['timeStart'])
+        time_spend.append(output['timeSpend'])
 
-    output['timeEnd'] = datetime.fromtimestamp(output['timeEnd']).strftime("%H:%M:%S.%f")[:-3]
-    output['timeStart'] = datetime.fromtimestamp(output['timeStart']).strftime("%H:%M:%S.%f")[:-3]
-    ip_dict[ip] = output
+        output['timeEnd'] = datetime.fromtimestamp(output['timeEnd']).strftime("%H:%M:%S.%f")[:-3]
+        output['timeStart'] = datetime.fromtimestamp(output['timeStart']).strftime("%H:%M:%S.%f")[:-3]
+        ip_dict[ip] = output
+
+    if args.arch:
+        with open(args.output[0:args.output.rfind('.')] + '.data', 'w') as data:
+            data.write(json.dumps(ip_dict) + '\n')
+            data.write(json.dumps(chart_data) + '\n')
+            data.write(json.dumps(time_spend) + '\n')
+        sys.exit(0)
+else:
+    for file_name in args.load:
+        with open(file_name) as f:
+            sub_ip_dict = json.loads(f.readline())
+            sub_chart_data = json.loads(f.readline())
+            sub_time_spend = json.loads(f.readline())
+
+            ip_dict.update(sub_ip_dict)
+            chart_data['x1'] += sub_chart_data['x1']
+            chart_data['Served Time'] += sub_chart_data['Served Time']
+            time_spend += sub_time_spend
 
 test_begin = min(chart_data['x1'])
 chart_data['Served Time'] = [round(t - test_begin, 3) for t in chart_data['Served Time']]
